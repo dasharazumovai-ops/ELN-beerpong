@@ -1,11 +1,6 @@
 export type PaymentType = 'before9' | 'after9' | 'retry' | 'revolut' | 'free' | 'cash';
 export type GameStatus = 'pending' | 'active' | 'finished';
 
-export interface Player {
-  id: string;
-  name: string;
-}
-
 export interface Team {
   id: string;
   player1: string;
@@ -59,18 +54,8 @@ export const PAYMENT_COLORS: Record<PaymentType, string> = {
   cash: 'bg-yellow-100 text-yellow-800 border-yellow-300',
 };
 
-export function getPaymentAmount(payment: PaymentType, isFirstGame: boolean): number {
-  switch (payment) {
-    case 'before9': return 3;
-    case 'after9': return 5;
-    case 'retry': return 3;
-    case 'free': return 0;
-    case 'revolut': return isFirstGame ? 3 : 3; // Same as before9 for first game
-    case 'cash': return 0; // Determined by cashAmount
-    default: return 0;
-  }
-}
+const PAYMENT_AMOUNTS: Record<PaymentType, number> = { before9: 3, after9: 5, retry: 3, revolut: 3, free: 0, cash: 0 };
 
-export function generateId(): string {
-  return Math.random().toString(36).substring(2, 10) + Date.now().toString(36).substring(2, 6);
-}
+export const getPaymentAmount = (payment: PaymentType): number => PAYMENT_AMOUNTS[payment];
+
+export const generateId = (): string => Math.random().toString(36).substring(2, 10) + Date.now().toString(36).substring(2, 6);

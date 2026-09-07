@@ -19,30 +19,20 @@ function createEmptyTournament(): Tournament {
 function loadTournament(): Tournament {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      return JSON.parse(saved);
-    }
+    return saved ? JSON.parse(saved) : createEmptyTournament();
   } catch {
-    // ignore
+    return createEmptyTournament();
   }
-  return createEmptyTournament();
 }
 
 function saveTournament(t: Tournament) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(t));
-  } catch {
-    // ignore
-  }
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(t)); } catch { /* ignore */ }
 }
 
 export function useTournament() {
   const [tournament, setTournament] = useState<Tournament>(loadTournament);
 
-  // Auto-save
-  useEffect(() => {
-    saveTournament(tournament);
-  }, [tournament]);
+  useEffect(() => saveTournament(tournament), [tournament]);
 
   const addTeam = useCallback((
     player1: string,
@@ -113,9 +103,7 @@ export function useTournament() {
   const startGame = useCallback((gameId: string) => {
     setTournament(prev => ({
       ...prev,
-      games: prev.games.map(g =>
-        g.id === gameId ? { ...g, status: 'active' as const, startedAt: new Date().toISOString() } : g
-      ),
+      games: prev.games.map(g => g.id === gameId ? { ...g, status: 'active' as const, startedAt: new Date().toISOString() } : g),
     }));
   }, []);
 
@@ -162,25 +150,14 @@ export function useTournament() {
   }, []);
 
   const updateTeam = useCallback((teamId: string, updates: Partial<Team>) => {
-    setTournament(prev => ({
-      ...prev,
-      teams: prev.teams.map(t => t.id === teamId ? { ...t, ...updates } : t),
-    }));
-  }, []);
-
-  const updateGame = useCallback((gameId: string, updates: Partial<Game>) => {
-    setTournament(prev => ({
-      ...prev,
-      games: prev.games.map(g => g.id === gameId ? { ...g, ...updates } : g),
-    }));
+    setTournament(prev => ({ ...prev, teams: prev.teams.map(t => t.id === teamId ? { ...t, ...updates } : t) }));
   }, []);
 
   const resetTournament = useCallback(() => {
-    if (confirm('Are you sure you want to reset everything? This cannot be undone.')) {
-      const empty = createEmptyTournament();
-      setTournament(empty);
-      saveTournament(empty);
-    }
+    if (!confirm('Are you sure you want to reset everything? This cannot be undone.')) return;
+    const empty = createEmptyTournament();
+    setTournament(empty);
+    saveTournament(empty);
   }, []);
 
   const exportData = useCallback(() => {
@@ -207,40 +184,13 @@ export function useTournament() {
     reader.readAsText(file);
   }, []);
 
-  const getTeam = useCallback((teamId: string | null) => {
-    return tournament.teams.find(t => t.id === teamId) || null;
-  }, [tournament.teams]);
+  const getTeam = useCallback((teamId: string | null) => tournament.teams.find(t => t.id === teamId) || null, [tournament.teams]);
 
-  const getTotalRevenue = useCallback(() => {
-    return tournament.teams.reduce((sum, team) => {
-      let amount = 0;
-      if (team.payment1 === 'cash' && team.cashAmount1) amount += team.cashAmount1;
-      else amount += getPaymentAmount(team.payment1, team.isFirstGame);
-      if (team.payment2 === 'cash' && team.cashAmount2) amount += team.cashAmount2;
-      else amount += getPaymentAmount(team.payment2, team.isFirstGame);
-      return sum + amount;
-    }, 0);
-  }, [tournament.teams]);
-
-  const getActiveGames = useCallback(() => {
-    return tournament.games.filter(g => g.status === 'active');
-  }, [tournament.games]);
-
-  const getPendingGames = useCallback(() => {
-    return tournament.games.filter(g => g.status === 'pending');
-  }, [tournament.games]);
-
-  const getFinishedGames = useCallback(() => {
-    return tournament.games.filter(g => g.status === 'finished');
-  }, [tournament.games]);
-
-  const getTeamsInRound = useCallback((round: number) => {
-    return tournament.teams.filter(t => !t.eliminated && t.round === round);
-  }, [tournament.teams]);
-
-  const getWinners = useCallback(() => {
-    return tournament.teams.filter(t => !t.eliminated);
-  }, [tournament.teams]);
+  const getTotalRevenue = useCallback(() => tournament.teams.reduce((sum, team) =>
+    sum
+      + (team.payment1 === 'cash' ? (team.cashAmount1 || 0) : getPaymentAmount(team.payment1))
+      + (team.payment2 === 'cash' ? (team.cashAmount2 || 0) : getPaymentAmount(team.payment2)),
+    0), [tournament.teams]);
 
   return {
     tournament,
@@ -250,16 +200,10 @@ export function useTournament() {
     finishGame,
     advanceRound,
     updateTeam,
-    updateGame,
     resetTournament,
     exportData,
     importData,
     getTeam,
     getTotalRevenue,
-    getActiveGames,
-    getPendingGames,
-    getFinishedGames,
-    getTeamsInRound,
-    getWinners,
   };
 }

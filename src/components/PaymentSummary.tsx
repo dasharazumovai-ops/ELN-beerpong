@@ -94,8 +94,8 @@ export default function PaymentSummary({ teams, totalRevenue }: PaymentSummaryPr
             </TableHeader>
             <TableBody>
               {teams.map((team, idx) => {
-                const p1Amount = team.payment1 === 'cash' ? (team.cashAmount1 || 0) : getPaymentAmount(team.payment1, team.isFirstGame);
-                const p2Amount = team.payment2 === 'cash' ? (team.cashAmount2 || 0) : getPaymentAmount(team.payment2, team.isFirstGame);
+                const p1Amount = team.payment1 === 'cash' ? (team.cashAmount1 || 0) : getPaymentAmount(team.payment1);
+                const p2Amount = team.payment2 === 'cash' ? (team.cashAmount2 || 0) : getPaymentAmount(team.payment2);
                 const total = p1Amount + p2Amount;
                 return (
                   <TableRow key={team.id}>
