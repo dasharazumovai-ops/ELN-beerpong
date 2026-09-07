@@ -66,7 +66,7 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
   };
 
   const handleClose = () => {
-    if (confirm(`Close registration with ${teams.length} teams? This locks the team list and generates Round 1. This cannot be undone.`)) {
+    if (confirm(`Close registration with ${teams.length} teams? No new teams can join after this — anyone still waiting for a partner gets a bye into the next round. This cannot be undone.`)) {
       onCloseRegistration();
     }
   };
@@ -174,6 +174,11 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
               </Button>
             )}
           </CardTitle>
+          {!registrationClosed && (
+            <p className="text-sm text-muted-foreground">
+              Games are already playable as teams pair up — check the Games tab. Only close registration once you're done taking new teams for the night.
+            </p>
+          )}
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { Tournament, Team, Game, EntryType, PaymentMethod } from '../types';
-import { generateId, getPaymentAmount, slotsInRound } from '../types';
+import { generateId, getPaymentAmount } from '../types';
 
 const STORAGE_KEY = 'eln-beerpong-tournament';
 
@@ -33,68 +33,54 @@ interface BracketDraft {
   games: Game[];
   teams: Team[];
   nextTable: number;
+  registrationClosed: boolean;
 }
 
 function bumpRound(draft: BracketDraft, teamId: string, round: number) {
   draft.teams = draft.teams.map(t => t.id === teamId ? { ...t, round } : t);
 }
 
-/** teamId has just secured (round, slot) — win or bye — so they advance into round+1. */
-function placeAdvancement(draft: BracketDraft, totalTeams: number, round: number, slot: number, teamId: string) {
-  bumpRound(draft, teamId, round + 1);
-  resolveSlot(draft, totalTeams, round, slot, teamId);
+/** Pairs teamId with whoever's already waiting alone at `round`, or leaves them as the new one waiting. */
+function arriveAtRound(draft: BracketDraft, round: number, teamId: string) {
+  const waiting = draft.games.find(g => g.round === round && g.status === 'pending' && !g.isBye && g.team2Id === null);
+  if (waiting) {
+    draft.games = draft.games.map(g => g.id === waiting.id ? { ...g, team2Id: teamId, tableNumber: draft.nextTable++ } : g);
+    return;
+  }
+  const slot = draft.games.filter(g => g.round === round).length;
+  draft.games = [...draft.games, {
+    id: generateId(), round, slot, tableNumber: null,
+    team1Id: teamId, team2Id: null, status: 'pending', winner: null, isBye: false,
+  }];
+}
+
+/** True once no further arrivals can ever reach `round` — registration is closed and every earlier round has fully finished. */
+function isRoundClosed(draft: BracketDraft, round: number): boolean {
+  if (round <= 1) return draft.registrationClosed;
+  if (!isRoundClosed(draft, round - 1)) return false;
+  return draft.games.filter(g => g.round === round - 1).every(g => g.status === 'finished');
 }
 
 /**
- * Walks (round, slot) forward: if it has no same-round sibling, nobody can ever contest
- * it, so it's recorded as a bye — but that only bumps teamId's round further if the slot
- * it lands on is *also* confirmed unopposed (checked one round ahead before committing).
- * Otherwise teamId simply waits at their current round for a real sibling game to finish,
- * which is what actually creates the next-round pairing.
+ * If `round` is closed and still has a lone team waiting for a partner who will never
+ * arrive, they get a bye — which may in turn close (and need to settle) the next round.
  */
-function resolveSlot(draft: BracketDraft, totalTeams: number, round: number, slot: number, teamId: string) {
-  let r = round, s = slot;
-  while (true) {
-    const totalSlots = slotsInRound(totalTeams, r);
-    if (totalSlots === 1) return; // (r, s) was the championship slot
+function trySettleRound(draft: BracketDraft, round: number) {
+  const active = draft.teams.filter(t => !t.eliminated);
+  if (draft.registrationClosed && active.length <= 1) return; // champion already decided
 
-    const siblingSlot = s % 2 === 0 ? s + 1 : s - 1;
-    const nextRound = r + 1;
-    const nextSlot = Math.floor(s / 2);
+  if (!isRoundClosed(draft, round)) return;
 
-    if (siblingSlot >= totalSlots) {
-      draft.games = [...draft.games, {
-        id: generateId(), round: nextRound, slot: nextSlot, tableNumber: null,
-        team1Id: teamId, team2Id: null, status: 'finished', winner: 'team1', isBye: true,
-        finishedAt: new Date().toISOString(),
-      }];
+  const waiting = draft.games.find(g => g.round === round && g.status === 'pending' && !g.isBye && g.team2Id === null);
+  if (!waiting || !waiting.team1Id) return;
 
-      const nextSlots = slotsInRound(totalTeams, nextRound);
-      const nextSiblingSlot = nextSlot % 2 === 0 ? nextSlot + 1 : nextSlot - 1;
-      if (nextSlots === 1 || nextSiblingSlot >= nextSlots) {
-        bumpRound(draft, teamId, nextRound + 1);
-        r = nextRound; s = nextSlot;
-        continue;
-      }
-      return;
-    }
-
-    const sibling = draft.games.find(g => g.round === r && g.slot === siblingSlot && g.status === 'finished');
-    if (!sibling) return;
-    if (draft.games.some(g => g.round === nextRound && g.slot === nextSlot)) return;
-
-    const siblingWinnerId = sibling.winner === 'team1' ? sibling.team1Id : sibling.team2Id;
-    const [team1Id, team2Id] = s < siblingSlot ? [teamId, siblingWinnerId] : [siblingWinnerId, teamId];
-
-    draft.games = [...draft.games, {
-      id: generateId(), round: nextRound, slot: nextSlot, tableNumber: draft.nextTable++,
-      team1Id, team2Id, status: 'pending', winner: null, isBye: false,
-    }];
-    // The sibling's winner may only have been advanced as far as `r` (e.g. via a bye
-    // that was waiting on this exact pairing) — make sure they're shown as being in nextRound too.
-    if (siblingWinnerId) bumpRound(draft, siblingWinnerId, nextRound);
-    return;
-  }
+  const teamId = waiting.team1Id;
+  draft.games = draft.games.map(g => g.id === waiting.id
+    ? { ...g, status: 'finished' as const, winner: 'team1' as const, isBye: true, finishedAt: new Date().toISOString() }
+    : g);
+  bumpRound(draft, teamId, round + 1);
+  arriveAtRound(draft, round + 1, teamId);
+  trySettleRound(draft, round + 1);
 }
 
 export function useTournament() {
@@ -122,29 +108,23 @@ export function useTournament() {
       eliminated: false,
       registeredAt: new Date().toISOString(),
     };
-    setTournament(prev => ({ ...prev, teams: [...prev.teams, team] }));
+    setTournament(prev => {
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams, team], nextTable: prev.nextTableNumber, registrationClosed: prev.registrationClosed };
+      arriveAtRound(draft, 1, team.id);
+      return { ...prev, teams: draft.teams, games: draft.games, nextTableNumber: draft.nextTable };
+    });
     return team.id;
   }, []);
 
   const closeRegistration = useCallback(() => {
     setTournament(prev => {
-      if (prev.registrationClosed || prev.teams.length < 2) return prev;
-
-      const ordered = prev.teams;
-      const totalSlots = Math.ceil(ordered.length / 2);
-      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber };
-
-      for (let slot = 0; slot < totalSlots; slot++) {
-        const t1 = ordered[slot * 2];
-        const t2 = ordered[slot * 2 + 1];
-        if (t1 && t2) {
-          draft.games.push({ id: generateId(), round: 1, slot, tableNumber: draft.nextTable++, team1Id: t1.id, team2Id: t2.id, status: 'pending', winner: null, isBye: false });
-        } else if (t1) {
-          draft.games.push({ id: generateId(), round: 1, slot, tableNumber: null, team1Id: t1.id, team2Id: null, status: 'finished', winner: 'team1', isBye: true, finishedAt: new Date().toISOString() });
-          placeAdvancement(draft, ordered.length, 1, slot, t1.id);
-        }
-      }
-
+      if (prev.registrationClosed) return prev;
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber, registrationClosed: true };
+      // Registration closing can unblock a lone waiter at ANY round, not just round 1
+      // (e.g. every round-1 game already finished while one round-2 winner sat waiting
+      // for an opponent who was always going to come from a not-yet-registered team).
+      const maxRound = draft.games.length ? Math.max(...draft.games.map(g => g.round)) : 0;
+      for (let r = 1; r <= maxRound + 1; r++) trySettleRound(draft, r);
       return { ...prev, registrationClosed: true, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
     });
   }, []);
@@ -170,9 +150,12 @@ export function useTournament() {
         games: prev.games.map(g => g.id === gameId ? finishedGame : g),
         teams: prev.teams.map(t => t.id === losingTeamId ? { ...t, eliminated: true } : t),
         nextTable: prev.nextTableNumber,
+        registrationClosed: prev.registrationClosed,
       };
 
-      placeAdvancement(draft, prev.teams.length, game.round, game.slot, winningTeamId);
+      bumpRound(draft, winningTeamId, game.round + 1);
+      arriveAtRound(draft, game.round + 1, winningTeamId);
+      trySettleRound(draft, game.round + 1);
 
       return { ...prev, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
     });

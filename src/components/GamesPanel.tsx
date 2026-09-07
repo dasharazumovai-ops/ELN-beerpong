@@ -8,18 +8,17 @@ import type { Game, Team } from '../types';
 
 interface GamesPanelProps {
   games: Game[];
-  registrationClosed: boolean;
   onStartGame: (gameId: string) => void;
   onFinishGame: (gameId: string, winner: 'team1' | 'team2') => void;
   getTeam: (id: string | null) => Team | null;
 }
 
-export default function GamesPanel({ games, registrationClosed, onStartGame, onFinishGame, getTeam }: GamesPanelProps) {
+export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }: GamesPanelProps) {
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
   const [finishingGameId, setFinishingGameId] = useState<string | null>(null);
 
   const activeGames = games.filter(g => g.status === 'active');
-  const pendingGames = games.filter(g => g.status === 'pending');
+  const pendingGames = games.filter(g => g.status === 'pending' && g.team2Id !== null);
   const finishedGames = games.filter(g => g.status === 'finished' && !g.isBye);
 
   const handleFinishClick = (gameId: string) => {
@@ -38,16 +37,6 @@ export default function GamesPanel({ games, registrationClosed, onStartGame, onF
   const finishGameData = finishingGameId ? games.find(g => g.id === finishingGameId) : null;
   const finishTeam1 = finishGameData ? getTeam(finishGameData.team1Id) : null;
   const finishTeam2 = finishGameData ? getTeam(finishGameData.team2Id) : null;
-
-  if (!registrationClosed) {
-    return (
-      <div className="text-center py-16 text-muted-foreground">
-        <Trophy className="w-16 h-16 mx-auto mb-4 opacity-50" />
-        <p className="text-xl">Registration is still open</p>
-        <p>Close registration on the Register tab to generate Round 1</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -197,6 +186,7 @@ export default function GamesPanel({ games, registrationClosed, onStartGame, onF
         <div className="text-center py-16 text-muted-foreground">
           <Trophy className="w-16 h-16 mx-auto mb-4 opacity-50" />
           <p className="text-xl">No games yet</p>
+          <p>Register at least 2 teams to get the first game ready</p>
         </div>
       )}
 

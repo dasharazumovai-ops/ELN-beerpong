@@ -158,7 +158,6 @@ export default function App() {
         {activeTab === 'games' && (
           <GamesPanel
             games={tournament.games}
-            registrationClosed={tournament.registrationClosed}
             onStartGame={startGame}
             onFinishGame={finishGame}
             getTeam={getTeam}

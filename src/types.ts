@@ -68,18 +68,3 @@ const ENTRY_PRICES: Record<EntryType, number> = { before9: 3, after9: 5, retry: 
 export const getPaymentAmount = (entry: EntryType, method: PaymentMethod): number => method === 'free' ? 0 : ENTRY_PRICES[entry];
 
 export const generateId = (): string => Math.random().toString(36).substring(2, 10) + Date.now().toString(36).substring(2, 6);
-
-/** Number of games+byes in the given round, for a bracket that started with totalTeams entrants. */
-export function slotsInRound(totalTeams: number, round: number): number {
-  let entrants = totalTeams;
-  for (let r = 1; r < round; r++) entrants = Math.ceil(entrants / 2);
-  return Math.ceil(entrants / 2);
-}
-
-/** The round number of the final (championship) game. */
-export function finalRound(totalTeams: number): number {
-  if (totalTeams < 2) return 1;
-  let round = 1;
-  while (slotsInRound(totalTeams, round) > 1) round++;
-  return round;
-}
