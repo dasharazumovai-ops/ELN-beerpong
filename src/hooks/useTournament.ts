@@ -154,8 +154,13 @@ export function useTournament() {
       };
 
       bumpRound(draft, winningTeamId, game.round + 1);
-      arriveAtRound(draft, game.round + 1, winningTeamId);
-      trySettleRound(draft, game.round + 1);
+
+      const stillActive = draft.teams.filter(t => !t.eliminated);
+      const isChampion = draft.registrationClosed && stillActive.length <= 1;
+      if (!isChampion) {
+        arriveAtRound(draft, game.round + 1, winningTeamId);
+        trySettleRound(draft, game.round + 1);
+      }
 
       return { ...prev, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
     });
