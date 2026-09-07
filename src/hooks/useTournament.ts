@@ -178,7 +178,27 @@ export function useTournament() {
   }, []);
 
   const exportData = useCallback(() => {
-    const dataStr = JSON.stringify(tournament, null, 2);
+    const active = tournament.teams.filter(t => !t.eliminated);
+    const champion = tournament.registrationClosed && active.length === 1 ? active[0] : null;
+
+    const teamsWithTotals = tournament.teams.map(team => ({
+      ...team,
+      totalPaid: getPaymentAmount(team.entry1, team.method1) + getPaymentAmount(team.entry2, team.method2),
+    }));
+    const totalRevenue = teamsWithTotals.reduce((sum, t) => sum + t.totalPaid, 0);
+
+    const payload = {
+      ...tournament,
+      teams: teamsWithTotals,
+      summary: {
+        exportedAt: new Date().toISOString(),
+        teamCount: tournament.teams.length,
+        totalRevenue,
+        champion: champion ? `${champion.player1} & ${champion.player2}` : null,
+      },
+    };
+
+    const dataStr = JSON.stringify(payload, null, 2);
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
