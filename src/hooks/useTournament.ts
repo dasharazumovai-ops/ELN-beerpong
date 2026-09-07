@@ -1,10 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
-import { doc, onSnapshot, runTransaction, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 import type { Tournament, Team, Game, EntryType, PaymentMethod } from '../types';
 import { generateId, getPaymentAmount } from '../types';
 
-const tournamentRef = doc(db, 'tournaments', 'current');
+const STORAGE_KEY = 'eln-beerpong-tournament';
 
 function createEmptyTournament(): Tournament {
   const now = new Date();
@@ -16,6 +14,19 @@ function createEmptyTournament(): Tournament {
     registrationClosed: false,
     nextTableNumber: 1,
   };
+}
+
+function loadTournament(): Tournament {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : createEmptyTournament();
+  } catch {
+    return createEmptyTournament();
+  }
+}
+
+function saveTournament(t: Tournament) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(t)); } catch { /* ignore */ }
 }
 
 interface BracketDraft {
@@ -73,30 +84,9 @@ function trySettleRound(draft: BracketDraft, round: number) {
 }
 
 export function useTournament() {
-  const [tournament, setTournament] = useState<Tournament>(createEmptyTournament);
-  const [loading, setLoading] = useState(true);
+  const [tournament, setTournament] = useState<Tournament>(loadTournament);
 
-  useEffect(() => {
-    const unsubscribe = onSnapshot(tournamentRef, (snap) => {
-      if (snap.exists()) {
-        setTournament(snap.data() as Tournament);
-      } else {
-        const empty = createEmptyTournament();
-        setDoc(tournamentRef, empty).catch(() => { /* another client may have created it first */ });
-        setTournament(empty);
-      }
-      setLoading(false);
-    }, () => setLoading(false));
-    return unsubscribe;
-  }, []);
-
-  const mutate = useCallback((updater: (prev: Tournament) => Tournament) => {
-    runTransaction(db, async (tx) => {
-      const snap = await tx.get(tournamentRef);
-      const prev = snap.exists() ? (snap.data() as Tournament) : createEmptyTournament();
-      tx.set(tournamentRef, updater(prev));
-    }).catch(() => { /* offline or blocked write — local view will resync once connectivity returns */ });
-  }, []);
+  useEffect(() => saveTournament(tournament), [tournament]);
 
   const addTeam = useCallback((
     player1: string,
@@ -118,16 +108,16 @@ export function useTournament() {
       eliminated: false,
       registeredAt: new Date().toISOString(),
     };
-    mutate(prev => {
+    setTournament(prev => {
       const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams, team], nextTable: prev.nextTableNumber, registrationClosed: prev.registrationClosed };
       arriveAtRound(draft, 1, team.id);
       return { ...prev, teams: draft.teams, games: draft.games, nextTableNumber: draft.nextTable };
     });
     return team.id;
-  }, [mutate]);
+  }, []);
 
   const closeRegistration = useCallback(() => {
-    mutate(prev => {
+    setTournament(prev => {
       if (prev.registrationClosed) return prev;
       const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber, registrationClosed: true };
       // Registration closing can unblock a lone waiter at ANY round, not just round 1
@@ -137,17 +127,17 @@ export function useTournament() {
       for (let r = 1; r <= maxRound + 1; r++) trySettleRound(draft, r);
       return { ...prev, registrationClosed: true, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
     });
-  }, [mutate]);
+  }, []);
 
   const startGame = useCallback((gameId: string) => {
-    mutate(prev => ({
+    setTournament(prev => ({
       ...prev,
       games: prev.games.map(g => g.id === gameId ? { ...g, status: 'active' as const, startedAt: new Date().toISOString() } : g),
     }));
-  }, [mutate]);
+  }, []);
 
   const finishGame = useCallback((gameId: string, winner: 'team1' | 'team2') => {
-    mutate(prev => {
+    setTournament(prev => {
       const game = prev.games.find(g => g.id === gameId);
       if (!game || game.status === 'finished') return prev;
 
@@ -174,22 +164,18 @@ export function useTournament() {
 
       return { ...prev, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
     });
-  }, [mutate]);
+  }, []);
 
   const updateTeam = useCallback((teamId: string, updates: Partial<Team>) => {
-    mutate(prev => ({ ...prev, teams: prev.teams.map(t => t.id === teamId ? { ...t, ...updates } : t) }));
-  }, [mutate]);
+    setTournament(prev => ({ ...prev, teams: prev.teams.map(t => t.id === teamId ? { ...t, ...updates } : t) }));
+  }, []);
 
-  const resetTournament = useCallback(async () => {
+  const resetTournament = useCallback(() => {
     if (!confirm('Are you sure you want to reset everything? This cannot be undone.')) return;
-    if (tournament.teams.length > 0) {
-      const archiveId = `${tournament.date}-${generateId()}`;
-      try {
-        await setDoc(doc(db, 'archive', archiveId), { ...tournament, archivedAt: new Date().toISOString() });
-      } catch { /* archiving is best-effort — don't block the reset on it */ }
-    }
-    mutate(() => createEmptyTournament());
-  }, [tournament, mutate]);
+    const empty = createEmptyTournament();
+    setTournament(empty);
+    saveTournament(empty);
+  }, []);
 
   const exportData = useCallback(() => {
     const dataStr = JSON.stringify(tournament, null, 2);
@@ -206,14 +192,14 @@ export function useTournament() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string) as Tournament;
-        mutate(() => data);
+        const data = JSON.parse(e.target?.result as string);
+        setTournament(data);
       } catch {
         alert('Invalid file format');
       }
     };
     reader.readAsText(file);
-  }, [mutate]);
+  }, []);
 
   const getTeam = useCallback((teamId: string | null) => tournament.teams.find(t => t.id === teamId) || null, [tournament.teams]);
 
@@ -223,7 +209,6 @@ export function useTournament() {
 
   return {
     tournament,
-    loading,
     addTeam,
     closeRegistration,
     startGame,
