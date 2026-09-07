@@ -16,6 +16,7 @@ export default function PaymentSummary({ teams, totalRevenue }: PaymentSummaryPr
   const retryCount = teams.filter(t => t.entry1 === 'retry' || t.entry2 === 'retry').length;
   const revolutCount = teams.filter(t => t.method1 === 'revolut' || t.method2 === 'revolut').length;
   const freeCount = teams.filter(t => t.method1 === 'free' || t.method2 === 'free').length;
+  const cashCount = teams.filter(t => t.method1 === 'cash' || t.method2 === 'cash').length;
   const cashTotal = teams.reduce((sum, t) =>
     sum + (t.method1 === 'cash' ? getPaymentAmount(t.entry1, t.method1) : 0) + (t.method2 === 'cash' ? getPaymentAmount(t.entry2, t.method2) : 0),
     0);
@@ -36,6 +37,7 @@ export default function PaymentSummary({ teams, totalRevenue }: PaymentSummaryPr
   const methodBreakdown = [
     { label: 'Revolut', count: revolutCount, icon: <CreditCard className="w-4 h-4" /> },
     { label: 'Free', count: freeCount, icon: <Gift className="w-4 h-4" /> },
+    { label: 'Cash', count: cashCount, icon: <Banknote className="w-4 h-4" /> },
   ];
 
   return (
@@ -80,7 +82,7 @@ export default function PaymentSummary({ teams, totalRevenue }: PaymentSummaryPr
           <CardTitle>Payment Method Breakdown</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             {methodBreakdown.map(item => (
               <div key={item.label} className="text-center p-4 bg-muted rounded-lg">
                 <div className="flex justify-center mb-2">{item.icon}</div>
