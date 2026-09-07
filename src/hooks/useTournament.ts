@@ -35,42 +35,66 @@ interface BracketDraft {
   nextTable: number;
 }
 
-/**
- * Records that `teamId` has secured (round, slot) and, if that leaves them without a
- * same-round sibling to pair against (an odd slot count), advances them again immediately
- * via a bye — recursing until they land on a slot with an unresolved sibling, or become champion.
- */
+function bumpRound(draft: BracketDraft, teamId: string, round: number) {
+  draft.teams = draft.teams.map(t => t.id === teamId ? { ...t, round } : t);
+}
+
+/** teamId has just secured (round, slot) — win or bye — so they advance into round+1. */
 function placeAdvancement(draft: BracketDraft, totalTeams: number, round: number, slot: number, teamId: string) {
-  draft.teams = draft.teams.map(t => t.id === teamId ? { ...t, round: round + 1 } : t);
+  bumpRound(draft, teamId, round + 1);
+  resolveSlot(draft, totalTeams, round, slot, teamId);
+}
 
-  const totalSlots = slotsInRound(totalTeams, round);
-  if (totalSlots === 1) return;
+/**
+ * Walks (round, slot) forward: if it has no same-round sibling, nobody can ever contest
+ * it, so it's recorded as a bye — but that only bumps teamId's round further if the slot
+ * it lands on is *also* confirmed unopposed (checked one round ahead before committing).
+ * Otherwise teamId simply waits at their current round for a real sibling game to finish,
+ * which is what actually creates the next-round pairing.
+ */
+function resolveSlot(draft: BracketDraft, totalTeams: number, round: number, slot: number, teamId: string) {
+  let r = round, s = slot;
+  while (true) {
+    const totalSlots = slotsInRound(totalTeams, r);
+    if (totalSlots === 1) return; // (r, s) was the championship slot
 
-  const siblingSlot = slot % 2 === 0 ? slot + 1 : slot - 1;
-  const nextRound = round + 1;
-  const nextSlot = Math.floor(slot / 2);
+    const siblingSlot = s % 2 === 0 ? s + 1 : s - 1;
+    const nextRound = r + 1;
+    const nextSlot = Math.floor(s / 2);
 
-  if (siblingSlot >= totalSlots) {
+    if (siblingSlot >= totalSlots) {
+      draft.games = [...draft.games, {
+        id: generateId(), round: nextRound, slot: nextSlot, tableNumber: null,
+        team1Id: teamId, team2Id: null, status: 'finished', winner: 'team1', isBye: true,
+        finishedAt: new Date().toISOString(),
+      }];
+
+      const nextSlots = slotsInRound(totalTeams, nextRound);
+      const nextSiblingSlot = nextSlot % 2 === 0 ? nextSlot + 1 : nextSlot - 1;
+      if (nextSlots === 1 || nextSiblingSlot >= nextSlots) {
+        bumpRound(draft, teamId, nextRound + 1);
+        r = nextRound; s = nextSlot;
+        continue;
+      }
+      return;
+    }
+
+    const sibling = draft.games.find(g => g.round === r && g.slot === siblingSlot && g.status === 'finished');
+    if (!sibling) return;
+    if (draft.games.some(g => g.round === nextRound && g.slot === nextSlot)) return;
+
+    const siblingWinnerId = sibling.winner === 'team1' ? sibling.team1Id : sibling.team2Id;
+    const [team1Id, team2Id] = s < siblingSlot ? [teamId, siblingWinnerId] : [siblingWinnerId, teamId];
+
     draft.games = [...draft.games, {
-      id: generateId(), round: nextRound, slot: nextSlot, tableNumber: null,
-      team1Id: teamId, team2Id: null, status: 'finished', winner: 'team1', isBye: true,
-      finishedAt: new Date().toISOString(),
+      id: generateId(), round: nextRound, slot: nextSlot, tableNumber: draft.nextTable++,
+      team1Id, team2Id, status: 'pending', winner: null, isBye: false,
     }];
-    placeAdvancement(draft, totalTeams, nextRound, nextSlot, teamId);
+    // The sibling's winner may only have been advanced as far as `r` (e.g. via a bye
+    // that was waiting on this exact pairing) — make sure they're shown as being in nextRound too.
+    if (siblingWinnerId) bumpRound(draft, siblingWinnerId, nextRound);
     return;
   }
-
-  const sibling = draft.games.find(g => g.round === round && g.slot === siblingSlot && g.status === 'finished');
-  if (!sibling) return;
-  if (draft.games.some(g => g.round === nextRound && g.slot === nextSlot)) return;
-
-  const siblingWinnerId = sibling.winner === 'team1' ? sibling.team1Id : sibling.team2Id;
-  const [team1Id, team2Id] = slot < siblingSlot ? [teamId, siblingWinnerId] : [siblingWinnerId, teamId];
-
-  draft.games = [...draft.games, {
-    id: generateId(), round: nextRound, slot: nextSlot, tableNumber: draft.nextTable++,
-    team1Id, team2Id, status: 'pending', winner: null, isBye: false,
-  }];
 }
 
 export function useTournament() {
