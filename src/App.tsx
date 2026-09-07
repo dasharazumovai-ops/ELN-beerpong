@@ -7,6 +7,7 @@ import GamesPanel from './components/GamesPanel';
 import BracketView from './components/BracketView';
 import ProjectorView from './components/ProjectorView';
 import PaymentSummary from './components/PaymentSummary';
+import ArchiveView from './components/ArchiveView';
 import {
   Users,
   Swords,
@@ -16,9 +17,10 @@ import {
   Download,
   Upload,
   RotateCcw,
+  Archive,
 } from 'lucide-react';
 
-type Tab = 'register' | 'games' | 'bracket' | 'payments';
+type Tab = 'register' | 'games' | 'bracket' | 'payments' | 'archive';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('register');
@@ -27,6 +29,7 @@ export default function App() {
 
   const {
     tournament,
+    loading,
     addTeam,
     closeRegistration,
     startGame,
@@ -45,7 +48,16 @@ export default function App() {
     { id: 'games', label: 'Games', icon: <Swords className="w-5 h-5" /> },
     { id: 'bracket', label: 'Bracket', icon: <Trophy className="w-5 h-5" /> },
     { id: 'payments', label: 'Payments', icon: <Euro className="w-5 h-5" /> },
+    { id: 'archive', label: 'Archive', icon: <Archive className="w-5 h-5" /> },
   ];
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-muted-foreground">
+        Connecting to live event...
+      </div>
+    );
+  }
 
   if (showProjector) {
     return (
@@ -179,6 +191,8 @@ export default function App() {
             totalRevenue={getTotalRevenue()}
           />
         )}
+
+        {activeTab === 'archive' && <ArchiveView />}
       </main>
     </div>
   );
