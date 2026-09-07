@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import type { Tournament, Team, Game, PaymentType } from '../types';
+import type { Tournament, Team, Game, EntryType, PaymentMethod } from '../types';
 import { generateId, getPaymentAmount } from '../types';
 
 const STORAGE_KEY = 'eln-beerpong-tournament';
@@ -37,20 +37,20 @@ export function useTournament() {
   const addTeam = useCallback((
     player1: string,
     player2: string,
-    payment1: PaymentType,
-    payment2: PaymentType,
-    cashAmount1?: number,
-    cashAmount2?: number,
+    entry1: EntryType,
+    method1: PaymentMethod,
+    entry2: EntryType,
+    method2: PaymentMethod,
     isRetry: boolean = false
   ) => {
     const team: Team = {
       id: generateId(),
       player1: player1.trim(),
       player2: player2.trim(),
-      payment1,
-      payment2,
-      cashAmount1,
-      cashAmount2,
+      entry1,
+      method1,
+      entry2,
+      method2,
       isFirstGame: !isRetry,
       round: isRetry ? 0 : 1,
       eliminated: false,
@@ -187,9 +187,7 @@ export function useTournament() {
   const getTeam = useCallback((teamId: string | null) => tournament.teams.find(t => t.id === teamId) || null, [tournament.teams]);
 
   const getTotalRevenue = useCallback(() => tournament.teams.reduce((sum, team) =>
-    sum
-      + (team.payment1 === 'cash' ? (team.cashAmount1 || 0) : getPaymentAmount(team.payment1))
-      + (team.payment2 === 'cash' ? (team.cashAmount2 || 0) : getPaymentAmount(team.payment2)),
+    sum + getPaymentAmount(team.entry1, team.method1) + getPaymentAmount(team.entry2, team.method2),
     0), [tournament.teams]);
 
   return {

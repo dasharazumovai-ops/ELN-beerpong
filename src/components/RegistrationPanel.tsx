@@ -5,47 +5,59 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Plus, RotateCcw, UserPlus, Clock, Moon, Gift, CreditCard, Banknote } from 'lucide-react';
-import type { PaymentType, Team } from '../types';
-import { PAYMENT_LABELS, PAYMENT_COLORS } from '../types';
+import type { EntryType, PaymentMethod, Team } from '../types';
+import { ENTRY_LABELS, ENTRY_COLORS, METHOD_LABELS, METHOD_COLORS } from '../types';
 
 interface RegistrationPanelProps {
-  onAddTeam: (player1: string, player2: string, payment1: PaymentType, payment2: PaymentType, cash1?: number, cash2?: number, isRetry?: boolean) => string;
+  onAddTeam: (player1: string, player2: string, entry1: EntryType, method1: PaymentMethod, entry2: EntryType, method2: PaymentMethod, isRetry?: boolean) => string;
   teams: Team[];
 }
 
-const PAYMENT_BUTTONS: { type: PaymentType; label: string; icon: React.ReactNode; color: string }[] = [
+const ENTRY_BUTTONS: { type: EntryType; label: string; icon: React.ReactNode; color: string }[] = [
   { type: 'before9', label: 'Before 9pm (€3)', icon: <Clock className="w-5 h-5" />, color: 'bg-blue-500 hover:bg-blue-600' },
   { type: 'after9', label: 'After 9pm (€5)', icon: <Moon className="w-5 h-5" />, color: 'bg-purple-500 hover:bg-purple-600' },
   { type: 'retry', label: 'Retry (€3)', icon: <RotateCcw className="w-5 h-5" />, color: 'bg-orange-500 hover:bg-orange-600' },
+];
+
+const METHOD_BUTTONS: { type: PaymentMethod; label: string; icon: React.ReactNode; color: string }[] = [
   { type: 'revolut', label: 'Revolut (R)', icon: <CreditCard className="w-5 h-5" />, color: 'bg-green-500 hover:bg-green-600' },
   { type: 'free', label: 'Free (F)', icon: <Gift className="w-5 h-5" />, color: 'bg-gray-500 hover:bg-gray-600' },
   { type: 'cash', label: 'Cash', icon: <Banknote className="w-5 h-5" />, color: 'bg-yellow-500 hover:bg-yellow-600' },
 ];
 
+function ButtonRow<T extends string>({ items, selected, onSelect }: { items: { type: T; label: string; icon: React.ReactNode; color: string }[]; selected: T; onSelect: (type: T) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-3">
+      {items.map((btn) => (
+        <button
+          key={btn.type}
+          onClick={() => onSelect(btn.type)}
+          className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-white font-semibold transition-all ${btn.color} ${
+            selected === btn.type ? 'ring-2 ring-offset-2 ring-black' : 'opacity-70'
+          }`}
+        >
+          {btn.icon}
+          <span className="text-sm">{btn.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function RegistrationPanel({ onAddTeam, teams }: RegistrationPanelProps) {
   const [player1, setPlayer1] = useState('');
   const [player2, setPlayer2] = useState('');
-  const [payment1, setPayment1] = useState<PaymentType>('before9');
-  const [payment2, setPayment2] = useState<PaymentType>('before9');
-  const [cash1, setCash1] = useState('');
-  const [cash2, setCash2] = useState('');
+  const [entry1, setEntry1] = useState<EntryType>('before9');
+  const [method1, setMethod1] = useState<PaymentMethod>('revolut');
+  const [entry2, setEntry2] = useState<EntryType>('before9');
+  const [method2, setMethod2] = useState<PaymentMethod>('revolut');
   const [isRetry, setIsRetry] = useState(false);
 
   const handleAdd = () => {
     if (!player1.trim() || !player2.trim()) return;
-    onAddTeam(
-      player1,
-      player2,
-      payment1,
-      payment2,
-      payment1 === 'cash' ? parseFloat(cash1) || 0 : undefined,
-      payment2 === 'cash' ? parseFloat(cash2) || 0 : undefined,
-      isRetry
-    );
+    onAddTeam(player1, player2, entry1, method1, entry2, method2, isRetry);
     setPlayer1('');
     setPlayer2('');
-    setCash1('');
-    setCash2('');
     setIsRetry(false);
   };
 
@@ -63,7 +75,7 @@ export default function RegistrationPanel({ onAddTeam, teams }: RegistrationPane
             Register New Team
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
           {/* Player Names */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -91,60 +103,30 @@ export default function RegistrationPanel({ onAddTeam, teams }: RegistrationPane
             </div>
           </div>
 
-          {/* Payment for Player 1 */}
-          <div className="space-y-2">
+          {/* Player 1 Payment */}
+          <div className="space-y-3">
             <Label className="text-lg font-semibold">Player 1 Payment</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {PAYMENT_BUTTONS.map((btn) => (
-                <button
-                  key={btn.type}
-                  onClick={() => setPayment1(btn.type)}
-                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-white font-semibold transition-all ${btn.color} ${
-                    payment1 === btn.type ? 'ring-4 ring-offset-2 ring-black scale-105' : 'opacity-80'
-                  }`}
-                >
-                  {btn.icon}
-                  <span className="text-sm">{btn.label}</span>
-                </button>
-              ))}
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Entry</p>
+              <ButtonRow items={ENTRY_BUTTONS} selected={entry1} onSelect={setEntry1} />
             </div>
-            {payment1 === 'cash' && (
-              <Input
-                type="number"
-                value={cash1}
-                onChange={(e) => setCash1(e.target.value)}
-                placeholder="Amount in €..."
-                className="h-12 text-lg"
-              />
-            )}
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Payment Method</p>
+              <ButtonRow items={METHOD_BUTTONS} selected={method1} onSelect={setMethod1} />
+            </div>
           </div>
 
-          {/* Payment for Player 2 */}
-          <div className="space-y-2">
+          {/* Player 2 Payment */}
+          <div className="space-y-3">
             <Label className="text-lg font-semibold">Player 2 Payment</Label>
-            <div className="grid grid-cols-3 gap-2">
-              {PAYMENT_BUTTONS.map((btn) => (
-                <button
-                  key={btn.type}
-                  onClick={() => setPayment2(btn.type)}
-                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-white font-semibold transition-all ${btn.color} ${
-                    payment2 === btn.type ? 'ring-4 ring-offset-2 ring-black scale-105' : 'opacity-80'
-                  }`}
-                >
-                  {btn.icon}
-                  <span className="text-sm">{btn.label}</span>
-                </button>
-              ))}
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Entry</p>
+              <ButtonRow items={ENTRY_BUTTONS} selected={entry2} onSelect={setEntry2} />
             </div>
-            {payment2 === 'cash' && (
-              <Input
-                type="number"
-                value={cash2}
-                onChange={(e) => setCash2(e.target.value)}
-                placeholder="Amount in €..."
-                className="h-12 text-lg"
-              />
-            )}
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">Payment Method</p>
+              <ButtonRow items={METHOD_BUTTONS} selected={method2} onSelect={setMethod2} />
+            </div>
           </div>
 
           {/* Retry Toggle */}
@@ -187,9 +169,9 @@ export default function RegistrationPanel({ onAddTeam, teams }: RegistrationPane
                 <tr className="border-b">
                   <th className="text-left py-2 px-3">#</th>
                   <th className="text-left py-2 px-3">Player 1</th>
-                  <th className="text-left py-2 px-3">P1 Pay</th>
+                  <th className="text-left py-2 px-3">P1 Payment</th>
                   <th className="text-left py-2 px-3">Player 2</th>
-                  <th className="text-left py-2 px-3">P2 Pay</th>
+                  <th className="text-left py-2 px-3">P2 Payment</th>
                   <th className="text-left py-2 px-3">Status</th>
                 </tr>
               </thead>
@@ -198,16 +180,14 @@ export default function RegistrationPanel({ onAddTeam, teams }: RegistrationPane
                   <tr key={team.id} className="border-b hover:bg-muted/50">
                     <td className="py-2 px-3">{idx + 1}</td>
                     <td className="py-2 px-3 font-medium">{team.player1}</td>
-                    <td className="py-2 px-3">
-                      <Badge className={PAYMENT_COLORS[team.payment1]}>
-                        {PAYMENT_LABELS[team.payment1]}
-                      </Badge>
+                    <td className="py-2 px-3 space-x-1">
+                      <Badge className={ENTRY_COLORS[team.entry1]}>{ENTRY_LABELS[team.entry1]}</Badge>
+                      <Badge className={METHOD_COLORS[team.method1]}>{METHOD_LABELS[team.method1]}</Badge>
                     </td>
                     <td className="py-2 px-3 font-medium">{team.player2}</td>
-                    <td className="py-2 px-3">
-                      <Badge className={PAYMENT_COLORS[team.payment2]}>
-                        {PAYMENT_LABELS[team.payment2]}
-                      </Badge>
+                    <td className="py-2 px-3 space-x-1">
+                      <Badge className={ENTRY_COLORS[team.entry2]}>{ENTRY_LABELS[team.entry2]}</Badge>
+                      <Badge className={METHOD_COLORS[team.method2]}>{METHOD_LABELS[team.method2]}</Badge>
                     </td>
                     <td className="py-2 px-3">
                       {team.eliminated ? (
