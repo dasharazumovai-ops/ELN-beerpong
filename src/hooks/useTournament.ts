@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import type { Tournament, Team, Game, EntryType, PaymentMethod } from '../types';
-import { generateId, getPaymentAmount } from '../types';
+import { generateId, getPaymentAmount, slotsInRound } from '../types';
 
 const STORAGE_KEY = 'eln-beerpong-tournament';
 
@@ -11,7 +11,7 @@ function createEmptyTournament(): Tournament {
     date: now.toISOString().split('T')[0],
     teams: [],
     games: [],
-    currentRound: 1,
+    registrationClosed: false,
     nextTableNumber: 1,
   };
 }
@@ -29,6 +29,50 @@ function saveTournament(t: Tournament) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(t)); } catch { /* ignore */ }
 }
 
+interface BracketDraft {
+  games: Game[];
+  teams: Team[];
+  nextTable: number;
+}
+
+/**
+ * Records that `teamId` has secured (round, slot) and, if that leaves them without a
+ * same-round sibling to pair against (an odd slot count), advances them again immediately
+ * via a bye — recursing until they land on a slot with an unresolved sibling, or become champion.
+ */
+function placeAdvancement(draft: BracketDraft, totalTeams: number, round: number, slot: number, teamId: string) {
+  draft.teams = draft.teams.map(t => t.id === teamId ? { ...t, round: round + 1 } : t);
+
+  const totalSlots = slotsInRound(totalTeams, round);
+  if (totalSlots === 1) return;
+
+  const siblingSlot = slot % 2 === 0 ? slot + 1 : slot - 1;
+  const nextRound = round + 1;
+  const nextSlot = Math.floor(slot / 2);
+
+  if (siblingSlot >= totalSlots) {
+    draft.games = [...draft.games, {
+      id: generateId(), round: nextRound, slot: nextSlot, tableNumber: null,
+      team1Id: teamId, team2Id: null, status: 'finished', winner: 'team1', isBye: true,
+      finishedAt: new Date().toISOString(),
+    }];
+    placeAdvancement(draft, totalTeams, nextRound, nextSlot, teamId);
+    return;
+  }
+
+  const sibling = draft.games.find(g => g.round === round && g.slot === siblingSlot && g.status === 'finished');
+  if (!sibling) return;
+  if (draft.games.some(g => g.round === nextRound && g.slot === nextSlot)) return;
+
+  const siblingWinnerId = sibling.winner === 'team1' ? sibling.team1Id : sibling.team2Id;
+  const [team1Id, team2Id] = slot < siblingSlot ? [teamId, siblingWinnerId] : [siblingWinnerId, teamId];
+
+  draft.games = [...draft.games, {
+    id: generateId(), round: nextRound, slot: nextSlot, tableNumber: draft.nextTable++,
+    team1Id, team2Id, status: 'pending', winner: null, isBye: false,
+  }];
+}
+
 export function useTournament() {
   const [tournament, setTournament] = useState<Tournament>(loadTournament);
 
@@ -41,7 +85,6 @@ export function useTournament() {
     method1: PaymentMethod,
     entry2: EntryType,
     method2: PaymentMethod,
-    isRetry: boolean = false
   ) => {
     const team: Team = {
       id: generateId(),
@@ -51,52 +94,34 @@ export function useTournament() {
       method1,
       entry2,
       method2,
-      isFirstGame: !isRetry,
-      round: isRetry ? 0 : 1,
+      round: 1,
       eliminated: false,
       registeredAt: new Date().toISOString(),
     };
-    setTournament(prev => ({
-      ...prev,
-      teams: [...prev.teams, team],
-    }));
+    setTournament(prev => ({ ...prev, teams: [...prev.teams, team] }));
     return team.id;
   }, []);
 
-  const createGamesForRound = useCallback(() => {
+  const closeRegistration = useCallback(() => {
     setTournament(prev => {
-      const activeTeams = prev.teams.filter(t => !t.eliminated && t.round === prev.currentRound);
-      const shuffled = [...activeTeams].sort(() => Math.random() - 0.5);
-      
-      const newGames: Game[] = [];
-      for (let i = 0; i < shuffled.length - 1; i += 2) {
-        const game: Game = {
-          id: generateId(),
-          round: prev.currentRound,
-          tableNumber: prev.nextTableNumber + Math.floor(i / 2),
-          team1Id: shuffled[i].id,
-          team2Id: shuffled[i + 1].id,
-          status: 'pending',
-          winner: null,
-        };
-        newGames.push(game);
+      if (prev.registrationClosed || prev.teams.length < 2) return prev;
+
+      const ordered = prev.teams;
+      const totalSlots = Math.ceil(ordered.length / 2);
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber };
+
+      for (let slot = 0; slot < totalSlots; slot++) {
+        const t1 = ordered[slot * 2];
+        const t2 = ordered[slot * 2 + 1];
+        if (t1 && t2) {
+          draft.games.push({ id: generateId(), round: 1, slot, tableNumber: draft.nextTable++, team1Id: t1.id, team2Id: t2.id, status: 'pending', winner: null, isBye: false });
+        } else if (t1) {
+          draft.games.push({ id: generateId(), round: 1, slot, tableNumber: null, team1Id: t1.id, team2Id: null, status: 'finished', winner: 'team1', isBye: true, finishedAt: new Date().toISOString() });
+          placeAdvancement(draft, ordered.length, 1, slot, t1.id);
+        }
       }
 
-      // Handle bye for odd number of teams
-      const byeTeam = shuffled.length % 2 === 1 ? shuffled[shuffled.length - 1] : null;
-      let updatedTeams = prev.teams;
-      if (byeTeam) {
-        updatedTeams = prev.teams.map(t =>
-          t.id === byeTeam.id ? { ...t, round: t.round + 1 } : t
-        );
-      }
-
-      return {
-        ...prev,
-        teams: updatedTeams,
-        games: [...prev.games, ...newGames],
-        nextTableNumber: prev.nextTableNumber + newGames.length,
-      };
+      return { ...prev, registrationClosed: true, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
     });
   }, []);
 
@@ -110,42 +135,22 @@ export function useTournament() {
   const finishGame = useCallback((gameId: string, winner: 'team1' | 'team2') => {
     setTournament(prev => {
       const game = prev.games.find(g => g.id === gameId);
-      if (!game) return prev;
+      if (!game || game.status === 'finished') return prev;
 
       const winningTeamId = winner === 'team1' ? game.team1Id : game.team2Id;
       const losingTeamId = winner === 'team1' ? game.team2Id : game.team1Id;
+      if (!winningTeamId) return prev;
 
-      const updatedTeams = prev.teams.map(t => {
-        if (t.id === winningTeamId) {
-          return { ...t, round: t.round + 1 };
-        }
-        if (t.id === losingTeamId) {
-          return { ...t, eliminated: true };
-        }
-        return t;
-      });
-
-      const updatedGames = prev.games.map(g =>
-        g.id === gameId ? { ...g, status: 'finished' as const, winner, finishedAt: new Date().toISOString() } : g
-      );
-
-      return {
-        ...prev,
-        teams: updatedTeams,
-        games: updatedGames,
+      const finishedGame: Game = { ...game, status: 'finished', winner, finishedAt: new Date().toISOString() };
+      const draft: BracketDraft = {
+        games: prev.games.map(g => g.id === gameId ? finishedGame : g),
+        teams: prev.teams.map(t => t.id === losingTeamId ? { ...t, eliminated: true } : t),
+        nextTable: prev.nextTableNumber,
       };
-    });
-  }, []);
 
-  const advanceRound = useCallback(() => {
-    setTournament(prev => {
-      const remainingTeams = prev.teams.filter(t => !t.eliminated && t.round > prev.currentRound);
-      if (remainingTeams.length <= 1) return prev;
-      
-      return {
-        ...prev,
-        currentRound: prev.currentRound + 1,
-      };
+      placeAdvancement(draft, prev.teams.length, game.round, game.slot, winningTeamId);
+
+      return { ...prev, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
     });
   }, []);
 
@@ -193,10 +198,9 @@ export function useTournament() {
   return {
     tournament,
     addTeam,
-    createGamesForRound,
+    closeRegistration,
     startGame,
     finishGame,
-    advanceRound,
     updateTeam,
     resetTournament,
     exportData,

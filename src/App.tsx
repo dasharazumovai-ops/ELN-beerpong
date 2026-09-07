@@ -28,17 +28,17 @@ export default function App() {
   const {
     tournament,
     addTeam,
-    createGamesForRound,
+    closeRegistration,
     startGame,
     finishGame,
-    advanceRound,
-    updateTeam,
     resetTournament,
     exportData,
     importData,
     getTeam,
     getTotalRevenue,
   } = useTournament();
+
+  const displayRound = tournament.games.length ? Math.max(...tournament.games.map(g => g.round)) : 1;
 
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'register', label: 'Register', icon: <Users className="w-5 h-5" /> },
@@ -59,7 +59,7 @@ export default function App() {
         <ProjectorView
           games={tournament.games}
           getTeam={getTeam}
-          currentRound={tournament.currentRound}
+          currentRound={displayRound}
         />
       </div>
     );
@@ -149,6 +149,8 @@ export default function App() {
         {activeTab === 'register' && (
           <RegistrationPanel
             onAddTeam={addTeam}
+            onCloseRegistration={closeRegistration}
+            registrationClosed={tournament.registrationClosed}
             teams={tournament.teams}
           />
         )}
@@ -156,12 +158,9 @@ export default function App() {
         {activeTab === 'games' && (
           <GamesPanel
             games={tournament.games}
-            teams={tournament.teams}
-            currentRound={tournament.currentRound}
+            registrationClosed={tournament.registrationClosed}
             onStartGame={startGame}
             onFinishGame={finishGame}
-            onCreateGames={createGamesForRound}
-            onAdvanceRound={advanceRound}
             getTeam={getTeam}
           />
         )}
@@ -170,9 +169,8 @@ export default function App() {
           <BracketView
             games={tournament.games}
             teams={tournament.teams}
-            currentRound={tournament.currentRound}
+            registrationClosed={tournament.registrationClosed}
             getTeam={getTeam}
-            onUpdateTeam={updateTeam}
           />
         )}
 

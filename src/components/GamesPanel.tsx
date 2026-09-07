@@ -3,38 +3,24 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Play, Trophy, Flag, Dices, Eye } from 'lucide-react';
+import { Play, Trophy, Flag } from 'lucide-react';
 import type { Game, Team } from '../types';
 
 interface GamesPanelProps {
   games: Game[];
-  teams: Team[];
-  currentRound: number;
+  registrationClosed: boolean;
   onStartGame: (gameId: string) => void;
   onFinishGame: (gameId: string, winner: 'team1' | 'team2') => void;
-  onCreateGames: () => void;
-  onAdvanceRound: () => void;
   getTeam: (id: string | null) => Team | null;
 }
 
-export default function GamesPanel({
-  games,
-  teams,
-  currentRound,
-  onStartGame,
-  onFinishGame,
-  onCreateGames,
-  onAdvanceRound,
-  getTeam,
-}: GamesPanelProps) {
+export default function GamesPanel({ games, registrationClosed, onStartGame, onFinishGame, getTeam }: GamesPanelProps) {
   const [showWinnerDialog, setShowWinnerDialog] = useState(false);
   const [finishingGameId, setFinishingGameId] = useState<string | null>(null);
 
   const activeGames = games.filter(g => g.status === 'active');
   const pendingGames = games.filter(g => g.status === 'pending');
-  const finishedGames = games.filter(g => g.status === 'finished');
-
-  const teamsInCurrentRound = teams.filter(t => !t.eliminated && t.round === currentRound);
+  const finishedGames = games.filter(g => g.status === 'finished' && !g.isBye);
 
   const handleFinishClick = (gameId: string) => {
     setFinishingGameId(gameId);
@@ -53,28 +39,18 @@ export default function GamesPanel({
   const finishTeam1 = finishGameData ? getTeam(finishGameData.team1Id) : null;
   const finishTeam2 = finishGameData ? getTeam(finishGameData.team2Id) : null;
 
+  if (!registrationClosed) {
+    return (
+      <div className="text-center py-16 text-muted-foreground">
+        <Trophy className="w-16 h-16 mx-auto mb-4 opacity-50" />
+        <p className="text-xl">Registration is still open</p>
+        <p>Close registration on the Register tab to generate Round 1</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Round Info */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-bold">Round {currentRound}</h2>
-          <Badge variant="outline" className="text-lg px-3 py-1">
-            {teamsInCurrentRound.length} teams waiting
-          </Badge>
-        </div>
-        <div className="flex gap-2">
-          <Button onClick={onCreateGames} variant="outline" className="h-12 text-lg">
-            <Dices className="w-5 h-5 mr-2" />
-            Create Games
-          </Button>
-          <Button onClick={onAdvanceRound} variant="secondary" className="h-12 text-lg">
-            <Eye className="w-5 h-5 mr-2" />
-            Next Round
-          </Button>
-        </div>
-      </div>
-
       {/* Active Games - BIG and GREEN */}
       {activeGames.length > 0 && (
         <div>
@@ -93,7 +69,7 @@ export default function GamesPanel({
                     <CardTitle className="flex items-center justify-between text-lg">
                       <span className="flex items-center gap-2">
                         <Play className="w-5 h-5 text-green-600" />
-                        Table {game.tableNumber}
+                        Round {game.round} · Table {game.tableNumber}
                       </span>
                       <Badge className="bg-green-600 text-white">PLAYING</Badge>
                     </CardTitle>
@@ -128,8 +104,8 @@ export default function GamesPanel({
       {pendingGames.length > 0 && (
         <div>
           <h3 className="text-xl font-bold mb-3 flex items-center gap-2">
-            <Dices className="w-5 h-5 text-gray-500" />
-            Upcoming Games ({pendingGames.length})
+            <Trophy className="w-5 h-5 text-gray-500" />
+            Ready to Play ({pendingGames.length})
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {pendingGames.map(game => {
@@ -140,7 +116,7 @@ export default function GamesPanel({
                 <Card key={game.id} className="border-gray-300">
                   <CardHeader className="pb-2">
                     <CardTitle className="flex items-center justify-between text-sm">
-                      <span>Table {game.tableNumber}</span>
+                      <span>Round {game.round} · Table {game.tableNumber}</span>
                       <Badge variant="outline">Pending</Badge>
                     </CardTitle>
                   </CardHeader>
@@ -187,7 +163,7 @@ export default function GamesPanel({
                 <Card key={game.id} className="border-red-400 border-2 bg-red-50 opacity-70">
                   <CardHeader className="pb-2">
                     <CardTitle className="flex items-center justify-between text-sm">
-                      <span>Table {game.tableNumber}</span>
+                      <span>Round {game.round} · Table {game.tableNumber}</span>
                       <Badge className="bg-red-500 text-white">Finished</Badge>
                     </CardTitle>
                   </CardHeader>
@@ -214,6 +190,13 @@ export default function GamesPanel({
               );
             })}
           </div>
+        </div>
+      )}
+
+      {activeGames.length === 0 && pendingGames.length === 0 && finishedGames.length === 0 && (
+        <div className="text-center py-16 text-muted-foreground">
+          <Trophy className="w-16 h-16 mx-auto mb-4 opacity-50" />
+          <p className="text-xl">No games yet</p>
         </div>
       )}
 

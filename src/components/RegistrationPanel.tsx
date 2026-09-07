@@ -4,12 +4,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, RotateCcw, UserPlus, Clock, Moon, Gift, CreditCard, Banknote } from 'lucide-react';
+import { Plus, RotateCcw, UserPlus, Clock, Moon, Gift, CreditCard, Banknote, Lock } from 'lucide-react';
 import type { EntryType, PaymentMethod, Team } from '../types';
 import { ENTRY_LABELS, ENTRY_COLORS, METHOD_LABELS, METHOD_COLORS } from '../types';
 
 interface RegistrationPanelProps {
-  onAddTeam: (player1: string, player2: string, entry1: EntryType, method1: PaymentMethod, entry2: EntryType, method2: PaymentMethod, isRetry?: boolean) => string;
+  onAddTeam: (player1: string, player2: string, entry1: EntryType, method1: PaymentMethod, entry2: EntryType, method2: PaymentMethod) => string;
+  onCloseRegistration: () => void;
+  registrationClosed: boolean;
   teams: Team[];
 }
 
@@ -44,122 +46,133 @@ function ButtonRow<T extends string>({ items, selected, onSelect }: { items: { t
   );
 }
 
-export default function RegistrationPanel({ onAddTeam, teams }: RegistrationPanelProps) {
+export default function RegistrationPanel({ onAddTeam, onCloseRegistration, registrationClosed, teams }: RegistrationPanelProps) {
   const [player1, setPlayer1] = useState('');
   const [player2, setPlayer2] = useState('');
   const [entry1, setEntry1] = useState<EntryType>('before9');
   const [method1, setMethod1] = useState<PaymentMethod>('revolut');
   const [entry2, setEntry2] = useState<EntryType>('before9');
   const [method2, setMethod2] = useState<PaymentMethod>('revolut');
-  const [isRetry, setIsRetry] = useState(false);
 
   const handleAdd = () => {
     if (!player1.trim() || !player2.trim()) return;
-    onAddTeam(player1, player2, entry1, method1, entry2, method2, isRetry);
+    onAddTeam(player1, player2, entry1, method1, entry2, method2);
     setPlayer1('');
     setPlayer2('');
-    setIsRetry(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') handleAdd();
   };
 
+  const handleClose = () => {
+    if (confirm(`Close registration with ${teams.length} teams? This locks the team list and generates Round 1. This cannot be undone.`)) {
+      onCloseRegistration();
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Add Team Form */}
-      <Card className="border-2">
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2 text-xl">
-            <UserPlus className="w-6 h-6" />
-            Register New Team
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Player Names */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="player1" className="text-lg font-semibold">Player 1</Label>
-              <Input
-                id="player1"
-                value={player1}
-                onChange={(e) => setPlayer1(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Name..."
-                className="text-lg h-12"
-                autoFocus
-              />
+      {registrationClosed ? (
+        <Card className="border-2 border-dashed">
+          <CardContent className="py-8 text-center text-muted-foreground">
+            <Lock className="w-8 h-8 mx-auto mb-2" />
+            <p className="text-lg font-semibold">Registration is closed</p>
+            <p>{teams.length} teams entered — the bracket is under the Bracket tab</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card className="border-2">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <UserPlus className="w-6 h-6" />
+              Register New Team
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Player Names */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="player1" className="text-lg font-semibold">Player 1</Label>
+                <Input
+                  id="player1"
+                  value={player1}
+                  onChange={(e) => setPlayer1(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Name..."
+                  className="text-lg h-12"
+                  autoFocus
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="player2" className="text-lg font-semibold">Player 2</Label>
+                <Input
+                  id="player2"
+                  value={player2}
+                  onChange={(e) => setPlayer2(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Name..."
+                  className="text-lg h-12"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="player2" className="text-lg font-semibold">Player 2</Label>
-              <Input
-                id="player2"
-                value={player2}
-                onChange={(e) => setPlayer2(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="Name..."
-                className="text-lg h-12"
-              />
-            </div>
-          </div>
 
-          {/* Player 1 Payment */}
-          <div className="space-y-3">
-            <Label className="text-lg font-semibold">Player 1 Payment</Label>
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Entry</p>
-              <ButtonRow items={ENTRY_BUTTONS} selected={entry1} onSelect={setEntry1} />
+            {/* Player 1 Payment */}
+            <div className="space-y-3">
+              <Label className="text-lg font-semibold">Player 1 Payment</Label>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Entry</p>
+                <ButtonRow items={ENTRY_BUTTONS} selected={entry1} onSelect={setEntry1} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Payment Method</p>
+                <ButtonRow items={METHOD_BUTTONS} selected={method1} onSelect={setMethod1} />
+              </div>
             </div>
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Payment Method</p>
-              <ButtonRow items={METHOD_BUTTONS} selected={method1} onSelect={setMethod1} />
-            </div>
-          </div>
 
-          {/* Player 2 Payment */}
-          <div className="space-y-3">
-            <Label className="text-lg font-semibold">Player 2 Payment</Label>
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Entry</p>
-              <ButtonRow items={ENTRY_BUTTONS} selected={entry2} onSelect={setEntry2} />
+            {/* Player 2 Payment */}
+            <div className="space-y-3">
+              <Label className="text-lg font-semibold">Player 2 Payment</Label>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Entry</p>
+                <ButtonRow items={ENTRY_BUTTONS} selected={entry2} onSelect={setEntry2} />
+              </div>
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">Payment Method</p>
+                <ButtonRow items={METHOD_BUTTONS} selected={method2} onSelect={setMethod2} />
+              </div>
             </div>
-            <div className="space-y-2">
-              <p className="text-sm text-muted-foreground">Payment Method</p>
-              <ButtonRow items={METHOD_BUTTONS} selected={method2} onSelect={setMethod2} />
-            </div>
-          </div>
 
-          {/* Retry Toggle */}
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="retry"
-              checked={isRetry}
-              onChange={(e) => setIsRetry(e.target.checked)}
-              className="w-5 h-5"
-            />
-            <Label htmlFor="retry" className="text-lg cursor-pointer">
-              This is a retry team (lost before, paying €3 to play again)
-            </Label>
-          </div>
-
-          {/* Add Button */}
-          <Button
-            onClick={handleAdd}
-            disabled={!player1.trim() || !player2.trim()}
-            className="w-full h-14 text-xl font-bold"
-          >
-            <Plus className="w-6 h-6 mr-2" />
-            ADD TEAM
-          </Button>
-        </CardContent>
-      </Card>
+            {/* Add Button */}
+            <Button
+              onClick={handleAdd}
+              disabled={!player1.trim() || !player2.trim()}
+              className="w-full h-14 text-xl font-bold"
+            >
+              <Plus className="w-6 h-6 mr-2" />
+              ADD TEAM
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Registered Teams List */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center justify-between">
+          <CardTitle className="flex items-center justify-between flex-wrap gap-3">
             <span>Registered Teams ({teams.length})</span>
+            {!registrationClosed && (
+              <Button
+                onClick={handleClose}
+                disabled={teams.length < 2}
+                variant="secondary"
+                size="sm"
+              >
+                <Lock className="w-4 h-4 mr-1" />
+                Finish Registration
+              </Button>
+            )}
           </CardTitle>
         </CardHeader>
         <CardContent>
