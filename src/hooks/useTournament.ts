@@ -40,17 +40,24 @@ function bumpRound(draft: BracketDraft, teamId: string, round: number) {
   draft.teams = draft.teams.map(t => t.id === teamId ? { ...t, round } : t);
 }
 
-/** Pairs teamId with whoever's already waiting alone at `round`, or leaves them as the new one waiting. */
-function arriveAtRound(draft: BracketDraft, round: number, teamId: string) {
+/**
+ * Pairs teamId with whoever's already waiting alone at `round`, or leaves them as the new
+ * one waiting. `feederGameId` is the game (or bye) that just produced teamId — null only for
+ * a fresh round-1 registrant — recorded so the bracket view can draw a connector to it.
+ */
+function arriveAtRound(draft: BracketDraft, round: number, teamId: string, feederGameId: string | null) {
   const waiting = draft.games.find(g => g.round === round && g.status === 'pending' && !g.isBye && g.team2Id === null);
   if (waiting) {
-    draft.games = draft.games.map(g => g.id === waiting.id ? { ...g, team2Id: teamId, tableNumber: draft.nextTable++ } : g);
+    draft.games = draft.games.map(g => g.id === waiting.id
+      ? { ...g, team2Id: teamId, tableNumber: draft.nextTable++, feederGameIds: [g.feederGameIds?.[0] ?? null, feederGameId] }
+      : g);
     return;
   }
   const slot = draft.games.filter(g => g.round === round).length;
   draft.games = [...draft.games, {
     id: generateId(), round, slot, tableNumber: null,
     team1Id: teamId, team2Id: null, status: 'pending', winner: null, isBye: false,
+    feederGameIds: [feederGameId, null],
   }];
 }
 
@@ -79,7 +86,7 @@ function trySettleRound(draft: BracketDraft, round: number) {
     ? { ...g, status: 'finished' as const, winner: 'team1' as const, isBye: true, finishedAt: new Date().toISOString() }
     : g);
   bumpRound(draft, teamId, round + 1);
-  arriveAtRound(draft, round + 1, teamId);
+  arriveAtRound(draft, round + 1, teamId, waiting.id);
   trySettleRound(draft, round + 1);
 }
 
@@ -110,7 +117,7 @@ export function useTournament() {
     };
     setTournament(prev => {
       const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams, team], nextTable: prev.nextTableNumber, registrationClosed: prev.registrationClosed };
-      arriveAtRound(draft, 1, team.id);
+      arriveAtRound(draft, 1, team.id, null);
       return { ...prev, teams: draft.teams, games: draft.games, nextTableNumber: draft.nextTable };
     });
     return team.id;
@@ -158,7 +165,7 @@ export function useTournament() {
       const stillActive = draft.teams.filter(t => !t.eliminated);
       const isChampion = draft.registrationClosed && stillActive.length <= 1;
       if (!isChampion) {
-        arriveAtRound(draft, game.round + 1, winningTeamId);
+        arriveAtRound(draft, game.round + 1, winningTeamId, game.id);
         trySettleRound(draft, game.round + 1);
       }
 

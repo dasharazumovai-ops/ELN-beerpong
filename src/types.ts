@@ -18,7 +18,7 @@ export interface Team {
 export interface Game {
   id: string;
   round: number;
-  /** Position within the round. Slot k's winner feeds round+1 slot floor(k/2), pairing with slot k's sibling (k xor 1). */
+  /** Display order within the round (arrival order) — not a feeder relationship. */
   slot: number;
   tableNumber: number | null;
   team1Id: string | null;
@@ -26,6 +26,8 @@ export interface Game {
   status: GameStatus;
   winner: 'team1' | 'team2' | null;
   isBye: boolean;
+  /** The game (or bye) that produced team1Id/team2Id, for drawing bracket connectors. Null for round-1 entrants and any not-yet-filled slot. */
+  feederGameIds: (string | null)[];
   startedAt?: string;
   finishedAt?: string;
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -18,14 +18,61 @@ function matchesSearch(team: Team, query: string) {
   return !!q && (team.player1.toLowerCase().includes(q) || team.player2.toLowerCase().includes(q));
 }
 
+interface Connector {
+  id: string;
+  d: string;
+}
+
 export default function BracketView({ teams, games, registrationClosed, getTeam }: BracketViewProps) {
   const [search, setSearch] = useState('');
   const [zoom, setZoom] = useState(1);
+  const scaledRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [connectors, setConnectors] = useState<Connector[]>([]);
+  const [svgSize, setSvgSize] = useState({ width: 0, height: 0 });
 
   const lastRound = games.length ? Math.max(...games.map(g => g.round)) : 0;
   const rounds = Array.from({ length: lastRound }, (_, i) => i + 1);
   const activeTeams = teams.filter(t => !t.eliminated);
   const championId = registrationClosed && activeTeams.length === 1 ? activeTeams[0].id : null;
+
+  useLayoutEffect(() => {
+    const scaled = scaledRef.current;
+    if (!scaled) return;
+
+    const compute = () => {
+      const anchorRect = scaled.getBoundingClientRect();
+      const paths: Connector[] = [];
+
+      for (const game of games) {
+        for (const feederId of game.feederGameIds ?? []) {
+          if (!feederId) continue;
+          const sourceEl = cardRefs.current.get(feederId);
+          const targetEl = cardRefs.current.get(game.id);
+          if (!sourceEl || !targetEl) continue;
+
+          const sRect = sourceEl.getBoundingClientRect();
+          const tRect = targetEl.getBoundingClientRect();
+
+          const sx = (sRect.right - anchorRect.left) / zoom;
+          const sy = (sRect.top + sRect.height / 2 - anchorRect.top) / zoom;
+          const tx = (tRect.left - anchorRect.left) / zoom;
+          const ty = (tRect.top + tRect.height / 2 - anchorRect.top) / zoom;
+          const midX = (sx + tx) / 2;
+
+          paths.push({ id: `${feederId}-${game.id}`, d: `M ${sx} ${sy} H ${midX} V ${ty} H ${tx}` });
+        }
+      }
+
+      setConnectors(paths);
+      setSvgSize({ width: scaled.scrollWidth, height: scaled.scrollHeight });
+    };
+
+    compute();
+    const resizeObserver = new ResizeObserver(compute);
+    resizeObserver.observe(scaled);
+    return () => resizeObserver.disconnect();
+  }, [games, zoom]);
 
   return (
     <div className="space-y-2">
@@ -58,8 +105,30 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
         </div>
       ) : (
         <div className="border rounded-lg overflow-auto" style={{ height: '48vh' }}>
-          <div className="p-4" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 'max-content' }}>
-            <div className="flex gap-4">
+          <div ref={scaledRef} className="p-4 relative" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 'max-content' }}>
+            <svg
+              className="absolute top-0 left-0 pointer-events-none"
+              width={svgSize.width}
+              height={svgSize.height}
+              style={{ overflow: 'visible' }}
+            >
+              <defs>
+                <marker id="bracket-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                  <path d="M0,0 L8,4 L0,8 Z" className="fill-muted-foreground" />
+                </marker>
+              </defs>
+              {connectors.map(c => (
+                <path
+                  key={c.id}
+                  d={c.d}
+                  className="stroke-muted-foreground"
+                  fill="none"
+                  strokeWidth={1.5}
+                  markerEnd="url(#bracket-arrow)"
+                />
+              ))}
+            </svg>
+            <div className="flex gap-4 relative">
               {rounds.map(round => {
                 const roundGames = games.filter(g => g.round === round).sort((a, b) => a.slot - b.slot);
                 return (
@@ -70,46 +139,56 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
                     {roundGames.map(game => {
                       const t1 = getTeam(game.team1Id);
                       const t2 = getTeam(game.team2Id);
+                      const setRef = (el: HTMLDivElement | null) => {
+                        if (el) cardRefs.current.set(game.id, el);
+                        else cardRefs.current.delete(game.id);
+                      };
 
                       if (game.isBye) {
                         return (
-                          <Card key={game.id} className={t1 && matchesSearch(t1, search) ? 'ring-2 ring-yellow-400' : ''}>
-                            <CardContent className="py-3 text-center">
-                              <div className="font-semibold text-sm">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
-                              <Badge variant="outline" className="mt-1 text-xs">Bye</Badge>
-                            </CardContent>
-                          </Card>
+                          <div key={game.id} ref={setRef}>
+                            <Card className={t1 && matchesSearch(t1, search) ? 'ring-2 ring-yellow-400' : ''}>
+                              <CardContent className="py-3 text-center">
+                                <div className="font-semibold text-sm">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
+                                <Badge variant="outline" className="mt-1 text-xs">Bye</Badge>
+                              </CardContent>
+                            </Card>
+                          </div>
                         );
                       }
 
                       if (!t2) {
                         return (
-                          <Card key={game.id} className={`border-dashed border-2 ${t1 && matchesSearch(t1, search) ? 'ring-2 ring-yellow-400 border-gray-200' : 'border-gray-200'}`}>
-                            <CardContent className="py-3 text-center">
-                              <div className="font-semibold text-sm">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
-                              <p className="text-xs text-muted-foreground mt-1">Waiting for opponent</p>
-                            </CardContent>
-                          </Card>
+                          <div key={game.id} ref={setRef}>
+                            <Card className={`border-dashed border-2 ${t1 && matchesSearch(t1, search) ? 'ring-2 ring-yellow-400 border-gray-200' : 'border-gray-200'}`}>
+                              <CardContent className="py-3 text-center">
+                                <div className="font-semibold text-sm">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
+                                <p className="text-xs text-muted-foreground mt-1">Waiting for opponent</p>
+                              </CardContent>
+                            </Card>
+                          </div>
                         );
                       }
 
                       return (
-                        <Card key={game.id} className={game.status === 'active' ? 'border-green-500 border-2' : ''}>
-                          <CardContent className="py-3 space-y-2">
-                            <div className={`rounded p-2 text-center text-sm ${game.winner === 'team1' ? 'bg-green-100 font-semibold' : 'bg-gray-50'} ${t1 && matchesSearch(t1, search) ? 'ring-2 ring-yellow-400' : ''}`}>
-                              {t1 ? `${t1.player1} & ${t1.player2}` : 'TBD'}
-                            </div>
-                            <div className="text-center text-xs text-muted-foreground">vs</div>
-                            <div className={`rounded p-2 text-center text-sm ${game.winner === 'team2' ? 'bg-green-100 font-semibold' : 'bg-gray-50'} ${matchesSearch(t2, search) ? 'ring-2 ring-yellow-400' : ''}`}>
-                              {t2.player1} & {t2.player2}
-                            </div>
-                            <div className="text-center">
-                              <Badge variant={game.status === 'active' ? 'default' : game.status === 'finished' ? 'secondary' : 'outline'} className="text-xs">
-                                {game.status === 'active' ? 'Playing' : `Table ${game.tableNumber}${game.status === 'pending' ? ' · Pending' : ''}`}
-                              </Badge>
-                            </div>
-                          </CardContent>
-                        </Card>
+                        <div key={game.id} ref={setRef}>
+                          <Card className={game.status === 'active' ? 'border-green-500 border-2' : ''}>
+                            <CardContent className="py-3 space-y-2">
+                              <div className={`rounded p-2 text-center text-sm ${game.winner === 'team1' ? 'bg-green-100 font-semibold' : 'bg-gray-50'} ${t1 && matchesSearch(t1, search) ? 'ring-2 ring-yellow-400' : ''}`}>
+                                {t1 ? `${t1.player1} & ${t1.player2}` : 'TBD'}
+                              </div>
+                              <div className="text-center text-xs text-muted-foreground">vs</div>
+                              <div className={`rounded p-2 text-center text-sm ${game.winner === 'team2' ? 'bg-green-100 font-semibold' : 'bg-gray-50'} ${matchesSearch(t2, search) ? 'ring-2 ring-yellow-400' : ''}`}>
+                                {t2.player1} & {t2.player2}
+                              </div>
+                              <div className="text-center">
+                                <Badge variant={game.status === 'active' ? 'default' : game.status === 'finished' ? 'secondary' : 'outline'} className="text-xs">
+                                  {game.status === 'active' ? 'Playing' : `Table ${game.tableNumber}${game.status === 'pending' ? ' · Pending' : ''}`}
+                                </Badge>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </div>
                       );
                     })}
                   </div>
