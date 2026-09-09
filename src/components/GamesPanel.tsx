@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Play, Trophy, Flag } from 'lucide-react';
+import FinishGameDialog from './FinishGameDialog';
 import type { Game, Team } from '../types';
 
 interface GamesPanelProps {
@@ -14,22 +14,15 @@ interface GamesPanelProps {
 }
 
 export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }: GamesPanelProps) {
-  const [showWinnerDialog, setShowWinnerDialog] = useState(false);
   const [finishingGameId, setFinishingGameId] = useState<string | null>(null);
 
   const activeGames = games.filter(g => g.status === 'active');
   const pendingGames = games.filter(g => g.status === 'pending' && g.team2Id !== null);
   const finishedGames = games.filter(g => g.status === 'finished' && !g.isBye);
 
-  const handleFinishClick = (gameId: string) => {
-    setFinishingGameId(gameId);
-    setShowWinnerDialog(true);
-  };
-
   const handleWinnerSelect = (winner: 'team1' | 'team2') => {
     if (finishingGameId) {
       onFinishGame(finishingGameId, winner);
-      setShowWinnerDialog(false);
       setFinishingGameId(null);
     }
   };
@@ -75,7 +68,7 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }
                       </div>
                     </div>
                     <Button
-                      onClick={() => handleFinishClick(game.id)}
+                      onClick={() => setFinishingGameId(game.id)}
                       className="w-full h-14 text-xl font-bold bg-red-500 hover:bg-red-600"
                     >
                       <Flag className="w-6 h-6 mr-2" />
@@ -190,42 +183,13 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }
         </div>
       )}
 
-      {/* Winner Selection Dialog */}
-      <Dialog open={showWinnerDialog} onOpenChange={setShowWinnerDialog}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="text-2xl flex items-center gap-2">
-              <Trophy className="w-6 h-6 text-yellow-500" />
-              Who Won?
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <p className="text-center text-muted-foreground">Select the winning team:</p>
-            <div className="grid grid-cols-2 gap-4">
-              {finishTeam1 && (
-                <button
-                  onClick={() => handleWinnerSelect('team1')}
-                  className="p-6 rounded-xl border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 transition-all text-center space-y-2"
-                >
-                  <div className="text-2xl font-bold">{finishTeam1.player1}</div>
-                  <div className="text-2xl font-bold">{finishTeam1.player2}</div>
-                  <div className="text-sm text-muted-foreground">Team 1</div>
-                </button>
-              )}
-              {finishTeam2 && (
-                <button
-                  onClick={() => handleWinnerSelect('team2')}
-                  className="p-6 rounded-xl border-2 border-gray-300 hover:border-green-500 hover:bg-green-50 transition-all text-center space-y-2"
-                >
-                  <div className="text-2xl font-bold">{finishTeam2.player1}</div>
-                  <div className="text-2xl font-bold">{finishTeam2.player2}</div>
-                  <div className="text-sm text-muted-foreground">Team 2</div>
-                </button>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FinishGameDialog
+        open={finishingGameId !== null}
+        onOpenChange={(open) => { if (!open) setFinishingGameId(null); }}
+        team1={finishTeam1}
+        team2={finishTeam2}
+        onSelectWinner={handleWinnerSelect}
+      />
     </div>
   );
 }

@@ -79,7 +79,7 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
           <CardContent className="py-8 text-center text-muted-foreground">
             <Lock className="w-8 h-8 mx-auto mb-2" />
             <p className="text-lg font-semibold">Registration is closed</p>
-            <p>{teams.length} teams entered — the bracket is under the Bracket tab</p>
+            <p>{teams.length} teams entered — close this window to see the bracket</p>
           </CardContent>
         </Card>
       ) : (

@@ -1,14 +1,15 @@
 import { useState, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useTournament } from './hooks/useTournament';
 import RegistrationPanel from './components/RegistrationPanel';
 import GamesPanel from './components/GamesPanel';
 import BracketView from './components/BracketView';
+import GameStrip from './components/GameStrip';
 import ProjectorView from './components/ProjectorView';
 import PaymentSummary from './components/PaymentSummary';
 import {
-  Users,
   Swords,
   Trophy,
   Monitor,
@@ -16,13 +17,15 @@ import {
   Download,
   Upload,
   RotateCcw,
+  UserPlus,
 } from 'lucide-react';
 
-type Tab = 'register' | 'games' | 'bracket' | 'payments';
+type Tab = 'main' | 'payments' | 'games';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<Tab>('register');
+  const [activeTab, setActiveTab] = useState<Tab>('main');
   const [showProjector, setShowProjector] = useState(false);
+  const [showRegistration, setShowRegistration] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
@@ -41,10 +44,9 @@ export default function App() {
   const displayRound = tournament.games.length ? Math.max(...tournament.games.map(g => g.round)) : 1;
 
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
-    { id: 'register', label: 'Register', icon: <Users className="w-5 h-5" /> },
-    { id: 'games', label: 'Games', icon: <Swords className="w-5 h-5" /> },
-    { id: 'bracket', label: 'Bracket', icon: <Trophy className="w-5 h-5" /> },
+    { id: 'main', label: 'Tournament', icon: <Trophy className="w-5 h-5" /> },
     { id: 'payments', label: 'Payments', icon: <Euro className="w-5 h-5" /> },
+    { id: 'games', label: 'Games', icon: <Swords className="w-5 h-5" /> },
   ];
 
   if (showProjector) {
@@ -146,12 +148,41 @@ export default function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
-        {activeTab === 'register' && (
-          <RegistrationPanel
-            onAddTeam={addTeam}
-            onCloseRegistration={closeRegistration}
-            registrationClosed={tournament.registrationClosed}
+        {activeTab === 'main' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <h2 className="text-xl font-bold">Tournament Bracket</h2>
+                <p className="text-sm text-muted-foreground">
+                  {tournament.teams.length} teams entered{!tournament.registrationClosed ? ' · registration open' : ''}
+                </p>
+              </div>
+              <Button onClick={() => setShowRegistration(true)}>
+                <UserPlus className="w-4 h-4 mr-1" />
+                Register Team
+              </Button>
+            </div>
+
+            <BracketView
+              games={tournament.games}
+              teams={tournament.teams}
+              registrationClosed={tournament.registrationClosed}
+              getTeam={getTeam}
+            />
+
+            <GameStrip
+              games={tournament.games}
+              getTeam={getTeam}
+              onStartGame={startGame}
+              onFinishGame={finishGame}
+            />
+          </div>
+        )}
+
+        {activeTab === 'payments' && (
+          <PaymentSummary
             teams={tournament.teams}
+            totalRevenue={getTotalRevenue()}
           />
         )}
 
@@ -163,23 +194,21 @@ export default function App() {
             getTeam={getTeam}
           />
         )}
-
-        {activeTab === 'bracket' && (
-          <BracketView
-            games={tournament.games}
-            teams={tournament.teams}
-            registrationClosed={tournament.registrationClosed}
-            getTeam={getTeam}
-          />
-        )}
-
-        {activeTab === 'payments' && (
-          <PaymentSummary
-            teams={tournament.teams}
-            totalRevenue={getTotalRevenue()}
-          />
-        )}
       </main>
+
+      <Dialog open={showRegistration} onOpenChange={setShowRegistration}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Team Registration</DialogTitle>
+          </DialogHeader>
+          <RegistrationPanel
+            onAddTeam={addTeam}
+            onCloseRegistration={closeRegistration}
+            registrationClosed={tournament.registrationClosed}
+            teams={tournament.teams}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
