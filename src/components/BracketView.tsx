@@ -18,13 +18,13 @@ interface Connector {
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 1.5;
 
-// Card color follows game state: finished (incl. bye) = red, active = green,
-// ready to play = blue, waiting for a partner = gray. No "vs", no table number —
-// this view is for seeing the whole shape of the tree, not game logistics.
+// Card color follows game state: finished = dark grey, bye = light grey (dashed),
+// active = green, ready to play = blue, waiting for a partner = lightest grey (dashed).
+// No "vs", no table number — this view is for seeing the shape of the tree, not logistics.
 function cardClasses(state: 'finished' | 'active' | 'pending' | 'waiting' | 'bye') {
   switch (state) {
-    case 'finished': return 'bg-red-50 border-red-300';
-    case 'bye': return 'bg-red-50 border-red-200 border-dashed';
+    case 'finished': return 'bg-gray-300 border-gray-400';
+    case 'bye': return 'bg-gray-200 border-gray-300 border-dashed';
     case 'active': return 'bg-green-50 border-green-400';
     case 'pending': return 'bg-blue-50 border-blue-300';
     case 'waiting': return 'bg-gray-50 border-gray-300 border-dashed';
