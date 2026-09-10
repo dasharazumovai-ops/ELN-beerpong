@@ -147,7 +147,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 py-6">
+      <main className={`max-w-7xl mx-auto px-4 py-6 ${activeTab === 'main' ? 'pb-44' : ''}`}>
         {activeTab === 'main' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between flex-wrap gap-3">
@@ -169,13 +169,6 @@ export default function App() {
               registrationClosed={tournament.registrationClosed}
               getTeam={getTeam}
             />
-
-            <GameStrip
-              games={tournament.games}
-              getTeam={getTeam}
-              onStartGame={startGame}
-              onFinishGame={finishGame}
-            />
           </div>
         )}
 
@@ -195,6 +188,19 @@ export default function App() {
           />
         )}
       </main>
+
+      {activeTab === 'main' && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-card border-t shadow-[0_-4px_16px_rgba(0,0,0,0.1)]">
+          <div className="max-w-7xl mx-auto px-4 py-3">
+            <GameStrip
+              games={tournament.games}
+              getTeam={getTeam}
+              onStartGame={startGame}
+              onFinishGame={finishGame}
+            />
+          </div>
+        </div>
+      )}
 
       <Dialog open={showRegistration} onOpenChange={setShowRegistration}>
         <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
