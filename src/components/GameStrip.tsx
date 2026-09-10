@@ -30,16 +30,16 @@ export default function GameStrip({ games, getTeam, onStartGame, onFinishGame }:
   const finishTeam2 = finishGameData ? getTeam(finishGameData.team2Id) : null;
 
   return (
-    <div className="border rounded-lg p-3 bg-card">
-      <h3 className="font-semibold flex items-center gap-2 text-sm mb-2">
-        <Swords className="w-4 h-4" />
+    <div className="border rounded-lg px-3 py-2 bg-card">
+      <h3 className="font-semibold flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
+        <Swords className="w-3.5 h-3.5" />
         Games — {active.length} playing, {pending.length} waiting
       </h3>
 
       {shown.length === 0 ? (
-        <p className="text-sm text-muted-foreground py-6 text-center">No games ready yet — register at least 2 teams</p>
+        <p className="text-sm text-muted-foreground py-3 text-center">No games ready yet — register at least 2 teams</p>
       ) : (
-        <div className="flex gap-3 overflow-x-auto pb-1">
+        <div className="flex gap-2 overflow-x-auto pb-1">
           {shown.map(game => {
             const t1 = getTeam(game.team1Id);
             const t2 = getTeam(game.team2Id);
@@ -48,22 +48,24 @@ export default function GameStrip({ games, getTeam, onStartGame, onFinishGame }:
             return (
               <div
                 key={game.id}
-                className={`shrink-0 w-44 rounded-lg border p-2.5 ${isActive ? 'border-green-500 border-2 bg-green-50' : 'border-gray-300'}`}
+                className={`shrink-0 w-80 rounded-lg border px-3 py-1.5 flex items-center gap-3 ${isActive ? 'border-green-500 border-2 bg-green-50' : 'border-gray-300'}`}
               >
-                <div className="text-xs text-muted-foreground mb-1.5 flex items-center justify-between">
-                  <span>R{game.round} · T{game.tableNumber}</span>
-                  {isActive && <span className="text-green-700 font-semibold">LIVE</span>}
+                <div className="flex-1 min-w-0">
+                  <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                    <span>R{game.round} · T{game.tableNumber}</span>
+                    {isActive && <span className="text-green-700 font-semibold">LIVE</span>}
+                  </div>
+                  <div className="text-sm font-medium truncate">
+                    {t1.player1} & {t1.player2} <span className="text-muted-foreground font-normal">vs</span> {t2.player1} & {t2.player2}
+                  </div>
                 </div>
-                <div className="text-sm font-semibold leading-tight truncate">{t1.player1} & {t1.player2}</div>
-                <div className="text-[11px] text-muted-foreground text-center my-0.5">vs</div>
-                <div className="text-sm font-semibold leading-tight truncate">{t2.player1} & {t2.player2}</div>
                 {isActive ? (
-                  <Button size="sm" onClick={() => setFinishingGameId(game.id)} className="w-full mt-2 bg-red-500 hover:bg-red-600">
+                  <Button size="sm" onClick={() => setFinishingGameId(game.id)} className="shrink-0 bg-red-500 hover:bg-red-600">
                     <Flag className="w-3.5 h-3.5 mr-1" />
                     Finish
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={() => onStartGame(game.id)} className="w-full mt-2 bg-green-500 hover:bg-green-600">
+                  <Button size="sm" onClick={() => onStartGame(game.id)} className="shrink-0 bg-green-500 hover:bg-green-600">
                     <Play className="w-3.5 h-3.5 mr-1" />
                     Start
                   </Button>
