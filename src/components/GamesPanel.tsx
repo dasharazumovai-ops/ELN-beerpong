@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Play, Trophy, Flag } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Play, Trophy, Flag, Search } from 'lucide-react';
 import FinishGameDialog from './FinishGameDialog';
 import type { Game, Team } from '../types';
 
@@ -15,10 +16,19 @@ interface GamesPanelProps {
 
 export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }: GamesPanelProps) {
   const [finishingGameId, setFinishingGameId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
 
-  const activeGames = games.filter(g => g.status === 'active');
-  const pendingGames = games.filter(g => g.status === 'pending' && g.team2Id !== null);
-  const finishedGames = games.filter(g => g.status === 'finished' && !g.isBye);
+  const matchesSearch = (game: Game) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    const t1 = getTeam(game.team1Id);
+    const t2 = getTeam(game.team2Id);
+    return [t1?.player1, t1?.player2, t2?.player1, t2?.player2].some(name => name?.toLowerCase().includes(q));
+  };
+
+  const activeGames = games.filter(g => g.status === 'active').filter(matchesSearch);
+  const pendingGames = games.filter(g => g.status === 'pending' && g.team2Id !== null).filter(matchesSearch);
+  const finishedGames = games.filter(g => g.status === 'finished' && !g.isBye).filter(matchesSearch);
 
   const handleWinnerSelect = (winner: 'team1' | 'team2') => {
     if (finishingGameId) {
@@ -33,6 +43,16 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-2">
+        <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+        <Input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Find a player or team..."
+          className="max-w-xs h-9"
+        />
+      </div>
+
       {/* Active Games - BIG and GREEN */}
       {activeGames.length > 0 && (
         <div>
@@ -178,8 +198,14 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }
       {activeGames.length === 0 && pendingGames.length === 0 && finishedGames.length === 0 && (
         <div className="text-center py-16 text-muted-foreground">
           <Trophy className="w-16 h-16 mx-auto mb-4 opacity-50" />
-          <p className="text-xl">No games yet</p>
-          <p>Register at least 2 teams to get the first game ready</p>
+          {search.trim() ? (
+            <p className="text-xl">No games match "{search.trim()}"</p>
+          ) : (
+            <>
+              <p className="text-xl">No games yet</p>
+              <p>Register at least 2 teams to get the first game ready</p>
+            </>
+          )}
         </div>
       )}
 

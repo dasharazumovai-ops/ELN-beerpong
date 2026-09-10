@@ -6,12 +6,10 @@ import RegistrationSheet from './components/RegistrationSheet';
 import GamesPanel from './components/GamesPanel';
 import BracketView from './components/BracketView';
 import GameStrip from './components/GameStrip';
-import ProjectorView from './components/ProjectorView';
 import PaymentSummary from './components/PaymentSummary';
 import {
   Swords,
   Trophy,
-  Monitor,
   Euro,
   Download,
   Upload,
@@ -23,7 +21,6 @@ type Tab = 'main' | 'payments' | 'games';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('main');
-  const [showProjector, setShowProjector] = useState(false);
   const [showRegistration, setShowRegistration] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,36 +37,16 @@ export default function App() {
     getTotalRevenue,
   } = useTournament();
 
-  const displayRound = tournament.games.length ? Math.max(...tournament.games.map(g => g.round)) : 1;
-
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'main', label: 'Tournament', icon: <Trophy className="w-5 h-5" /> },
     { id: 'payments', label: 'Payments', icon: <Euro className="w-5 h-5" /> },
     { id: 'games', label: 'Games', icon: <Swords className="w-5 h-5" /> },
   ];
 
-  if (showProjector) {
-    return (
-      <div className="relative">
-        <button
-          onClick={() => setShowProjector(false)}
-          className="fixed top-4 right-4 z-50 bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-lg backdrop-blur"
-        >
-          Exit Projector
-        </button>
-        <ProjectorView
-          games={tournament.games}
-          getTeam={getTeam}
-          currentRound={displayRound}
-        />
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b bg-card sticky top-0 z-40">
+      {/* Header — scrolls with the page, not pinned, to free up space for the bracket */}
+      <header className="border-b bg-card">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-3">
@@ -79,14 +56,6 @@ export default function App() {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowProjector(true)}
-              >
-                <Monitor className="w-4 h-4 mr-1" />
-                Projector
-              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -146,9 +115,9 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className={`max-w-7xl mx-auto px-4 py-6 ${activeTab === 'main' ? 'pb-44' : ''}`}>
+      <main className={`max-w-7xl mx-auto px-4 py-4 ${activeTab === 'main' ? 'pb-56' : ''}`}>
         {activeTab === 'main' && (
-          <div className="space-y-4">
+          <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
                 <h2 className="text-xl font-bold">Tournament Bracket</h2>
@@ -190,7 +159,7 @@ export default function App() {
 
       {activeTab === 'main' && (
         <div className="fixed bottom-0 left-0 right-0 z-30 bg-card border-t shadow-[0_-4px_16px_rgba(0,0,0,0.1)]">
-          <div className="max-w-7xl mx-auto px-4 py-3">
+          <div className="max-w-7xl mx-auto px-4 py-4">
             <GameStrip
               games={tournament.games}
               getTeam={getTeam}

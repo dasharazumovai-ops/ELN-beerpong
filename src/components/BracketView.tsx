@@ -1,9 +1,6 @@
-import { useLayoutEffect, useRef, useState } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/input';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Search, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import type { Game, Team } from '../types';
 
 interface BracketViewProps {
@@ -13,19 +10,30 @@ interface BracketViewProps {
   getTeam: (id: string | null) => Team | null;
 }
 
-function matchesSearch(team: Team, query: string) {
-  const q = query.trim().toLowerCase();
-  return !!q && (team.player1.toLowerCase().includes(q) || team.player2.toLowerCase().includes(q));
-}
-
 interface Connector {
   id: string;
   d: string;
 }
 
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 1.5;
+
+// Card color follows game state: finished (incl. bye) = red, active = green,
+// ready to play = blue, waiting for a partner = gray. No "vs", no table number —
+// this view is for seeing the whole shape of the tree, not game logistics.
+function cardClasses(state: 'finished' | 'active' | 'pending' | 'waiting' | 'bye') {
+  switch (state) {
+    case 'finished': return 'bg-red-50 border-red-300';
+    case 'bye': return 'bg-red-50 border-red-200 border-dashed';
+    case 'active': return 'bg-green-50 border-green-400';
+    case 'pending': return 'bg-blue-50 border-blue-300';
+    case 'waiting': return 'bg-gray-50 border-gray-300 border-dashed';
+  }
+}
+
 export default function BracketView({ teams, games, registrationClosed, getTeam }: BracketViewProps) {
-  const [search, setSearch] = useState('');
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(0.7);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const scaledRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [connectors, setConnectors] = useState<Connector[]>([]);
@@ -74,28 +82,33 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
     return () => resizeObserver.disconnect();
   }, [games, zoom]);
 
+  // Trackpad pinch (reported as wheel + ctrlKey) zooms the tree instead of the page.
+  // Needs a non-passive native listener since React's onWheel can't preventDefault reliably.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      setZoom(z => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, +(z - e.deltaY * 0.01).toFixed(2))));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2 flex-wrap">
-        <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Find a player or team..."
-          className="max-w-xs h-8"
-        />
-        <div className="flex items-center gap-1 ml-auto">
-          <Button size="icon-sm" variant="outline" onClick={() => setZoom(z => Math.max(0.5, +(z - 0.1).toFixed(2)))}>
-            <ZoomOut className="w-4 h-4" />
-          </Button>
-          <span className="text-xs text-muted-foreground w-10 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
-          <Button size="icon-sm" variant="outline" onClick={() => setZoom(z => Math.min(1.5, +(z + 0.1).toFixed(2)))}>
-            <ZoomIn className="w-4 h-4" />
-          </Button>
-          <Button size="icon-sm" variant="outline" onClick={() => setZoom(1)}>
-            <Maximize2 className="w-4 h-4" />
-          </Button>
-        </div>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-end gap-1">
+        <Button size="icon-sm" variant="outline" onClick={() => setZoom(z => Math.max(MIN_ZOOM, +(z - 0.1).toFixed(2)))}>
+          <ZoomOut className="w-4 h-4" />
+        </Button>
+        <span className="text-xs text-muted-foreground w-10 text-center tabular-nums">{Math.round(zoom * 100)}%</span>
+        <Button size="icon-sm" variant="outline" onClick={() => setZoom(z => Math.min(MAX_ZOOM, +(z + 0.1).toFixed(2)))}>
+          <ZoomIn className="w-4 h-4" />
+        </Button>
+        <Button size="icon-sm" variant="outline" onClick={() => setZoom(0.7)}>
+          <Maximize2 className="w-4 h-4" />
+        </Button>
       </div>
 
       {rounds.length === 0 ? (
@@ -104,8 +117,8 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
           <p>The bracket fills in as teams register and start playing</p>
         </div>
       ) : (
-        <div className="border rounded-lg overflow-auto" style={{ height: '48vh' }}>
-          <div ref={scaledRef} className="p-4 relative" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 'max-content' }}>
+        <div ref={scrollRef} className="border rounded overflow-auto" style={{ height: '64vh' }}>
+          <div ref={scaledRef} className="p-2 relative" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 'max-content' }}>
             <svg
               className="absolute top-0 left-0 pointer-events-none"
               width={svgSize.width}
@@ -128,13 +141,13 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
                 />
               ))}
             </svg>
-            <div className="flex gap-4 relative">
+            <div className="flex gap-2 relative">
               {rounds.map(round => {
                 const roundGames = games.filter(g => g.round === round).sort((a, b) => a.slot - b.slot);
                 return (
-                  <div key={round} className="w-64 shrink-0 space-y-3">
-                    <h3 className="text-lg font-bold text-center">
-                      {round === lastRound && championId ? 'Final' : `Round ${round}`}
+                  <div key={round} className="w-36 shrink-0 space-y-1.5">
+                    <h3 className="text-xs font-bold text-center text-muted-foreground uppercase tracking-wide">
+                      {round === lastRound && championId ? 'Final' : `R${round}`}
                     </h3>
                     {roundGames.map(game => {
                       const t1 = getTeam(game.team1Id);
@@ -146,48 +159,27 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
 
                       if (game.isBye) {
                         return (
-                          <div key={game.id} ref={setRef}>
-                            <Card className={t1 && matchesSearch(t1, search) ? 'ring-2 ring-yellow-400' : ''}>
-                              <CardContent className="py-3 text-center">
-                                <div className="font-semibold text-sm">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
-                                <Badge variant="outline" className="mt-1 text-xs">Bye</Badge>
-                              </CardContent>
-                            </Card>
+                          <div key={game.id} ref={setRef} className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('bye')}`}>
+                            <div className="font-semibold truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
+                            <div className="text-muted-foreground truncate">Bye</div>
                           </div>
                         );
                       }
 
                       if (!t2) {
                         return (
-                          <div key={game.id} ref={setRef}>
-                            <Card className={`border-dashed border-2 ${t1 && matchesSearch(t1, search) ? 'ring-2 ring-yellow-400 border-gray-200' : 'border-gray-200'}`}>
-                              <CardContent className="py-3 text-center">
-                                <div className="font-semibold text-sm">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
-                                <p className="text-xs text-muted-foreground mt-1">Waiting for opponent</p>
-                              </CardContent>
-                            </Card>
+                          <div key={game.id} ref={setRef} className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('waiting')}`}>
+                            <div className="font-medium truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
+                            <div className="text-muted-foreground truncate">waiting for opponent</div>
                           </div>
                         );
                       }
 
+                      const state = game.status === 'active' ? 'active' : game.status === 'finished' ? 'finished' : 'pending';
                       return (
-                        <div key={game.id} ref={setRef}>
-                          <Card className={game.status === 'active' ? 'border-green-500 border-2' : ''}>
-                            <CardContent className="py-3 space-y-2">
-                              <div className={`rounded p-2 text-center text-sm ${game.winner === 'team1' ? 'bg-green-100 font-semibold' : 'bg-gray-50'} ${t1 && matchesSearch(t1, search) ? 'ring-2 ring-yellow-400' : ''}`}>
-                                {t1 ? `${t1.player1} & ${t1.player2}` : 'TBD'}
-                              </div>
-                              <div className="text-center text-xs text-muted-foreground">vs</div>
-                              <div className={`rounded p-2 text-center text-sm ${game.winner === 'team2' ? 'bg-green-100 font-semibold' : 'bg-gray-50'} ${matchesSearch(t2, search) ? 'ring-2 ring-yellow-400' : ''}`}>
-                                {t2.player1} & {t2.player2}
-                              </div>
-                              <div className="text-center">
-                                <Badge variant={game.status === 'active' ? 'default' : game.status === 'finished' ? 'secondary' : 'outline'} className="text-xs">
-                                  {game.status === 'active' ? 'Playing' : `Table ${game.tableNumber}${game.status === 'pending' ? ' · Pending' : ''}`}
-                                </Badge>
-                              </div>
-                            </CardContent>
-                          </Card>
+                        <div key={game.id} ref={setRef} className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)}`}>
+                          <div className={`truncate ${game.winner === 'team1' ? 'font-semibold' : ''}`}>{t1.player1} & {t1.player2}</div>
+                          <div className={`truncate ${game.winner === 'team2' ? 'font-semibold' : ''}`}>{t2.player1} & {t2.player2}</div>
                         </div>
                       );
                     })}

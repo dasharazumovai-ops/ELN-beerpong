@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Plus, RotateCcw, UserPlus, Clock, Moon, Gift, CreditCard, Banknote, Lock } from 'lucide-react';
+import { Plus, RotateCcw, UserPlus, Clock, Moon, Gift, CreditCard, Banknote, Lock, Search } from 'lucide-react';
 import type { EntryType, PaymentMethod, Team } from '../types';
 import { ENTRY_LABELS, ENTRY_COLORS, METHOD_LABELS, METHOD_COLORS } from '../types';
 
@@ -53,6 +53,12 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
   const [method1, setMethod1] = useState<PaymentMethod>('revolut');
   const [entry2, setEntry2] = useState<EntryType>('before9');
   const [method2, setMethod2] = useState<PaymentMethod>('revolut');
+  const [search, setSearch] = useState('');
+
+  const filteredTeams = teams.filter(team => {
+    const q = search.trim().toLowerCase();
+    return !q || team.player1.toLowerCase().includes(q) || team.player2.toLowerCase().includes(q);
+  });
 
   const handleAdd = () => {
     if (!player1.trim() || !player2.trim()) return;
@@ -179,6 +185,15 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
               Games are already playable as teams pair up — check the Games tab. Only close registration once you're done taking new teams for the night.
             </p>
           )}
+          <div className="flex items-center gap-2 pt-2">
+            <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Find a player or team..."
+              className="max-w-xs h-8"
+            />
+          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -194,7 +209,7 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
                 </tr>
               </thead>
               <tbody>
-                {teams.map((team, idx) => (
+                {filteredTeams.map((team, idx) => (
                   <tr key={team.id} className="border-b hover:bg-muted/50">
                     <td className="py-2 px-3">{idx + 1}</td>
                     <td className="py-2 px-3 font-medium">{team.player1}</td>
