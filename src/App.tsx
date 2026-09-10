@@ -159,7 +159,7 @@ export default function App() {
 
       {activeTab === 'main' && (
         <div className="fixed bottom-0 left-0 right-0 z-30 bg-card border-t shadow-[0_-4px_16px_rgba(0,0,0,0.1)]">
-          <div className="max-w-7xl mx-auto px-4 py-2">
+          <div className="max-w-6xl mx-auto px-8 py-2">
             <GameStrip
               games={tournament.games}
               getTeam={getTeam}

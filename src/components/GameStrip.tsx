@@ -39,7 +39,7 @@ export default function GameStrip({ games, getTeam, onStartGame, onFinishGame }:
       {shown.length === 0 ? (
         <p className="text-sm text-muted-foreground py-3 text-center">No games ready yet — register at least 2 teams</p>
       ) : (
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
           {shown.map(game => {
             const t1 = getTeam(game.team1Id);
             const t2 = getTeam(game.team2Id);
@@ -48,25 +48,22 @@ export default function GameStrip({ games, getTeam, onStartGame, onFinishGame }:
             return (
               <div
                 key={game.id}
-                className={`shrink-0 w-80 rounded-lg border px-3 py-1.5 flex items-center gap-3 ${isActive ? 'border-green-500 border-2 bg-green-50' : 'border-gray-300'}`}
+                className={`shrink-0 w-36 rounded-lg border px-2 py-1 ${isActive ? 'border-green-500 border-2 bg-green-50' : 'border-gray-300'}`}
               >
-                <div className="flex-1 min-w-0">
-                  <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-                    <span>R{game.round} · T{game.tableNumber}</span>
-                    {isActive && <span className="text-green-700 font-semibold">LIVE</span>}
-                  </div>
-                  <div className="text-sm font-medium truncate">
-                    {t1.player1} & {t1.player2} <span className="text-muted-foreground font-normal">vs</span> {t2.player1} & {t2.player2}
-                  </div>
+                <div className="text-[10px] text-muted-foreground flex items-center justify-between">
+                  <span>R{game.round} · T{game.tableNumber}</span>
+                  {isActive && <span className="text-green-700 font-semibold">LIVE</span>}
                 </div>
+                <div className="text-xs font-medium truncate leading-tight">{t1.player1} & {t1.player2}</div>
+                <div className="text-xs font-medium truncate leading-tight">{t2.player1} & {t2.player2}</div>
                 {isActive ? (
-                  <Button size="sm" onClick={() => setFinishingGameId(game.id)} className="shrink-0 bg-red-500 hover:bg-red-600">
-                    <Flag className="w-3.5 h-3.5 mr-1" />
+                  <Button size="sm" onClick={() => setFinishingGameId(game.id)} className="w-full mt-1 h-6 text-xs bg-red-500 hover:bg-red-600">
+                    <Flag className="w-3 h-3 mr-1" />
                     Finish
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={() => onStartGame(game.id)} className="shrink-0 bg-green-500 hover:bg-green-600">
-                    <Play className="w-3.5 h-3.5 mr-1" />
+                  <Button size="sm" onClick={() => onStartGame(game.id)} className="w-full mt-1 h-6 text-xs bg-green-500 hover:bg-green-600">
+                    <Play className="w-3 h-3 mr-1" />
                     Start
                   </Button>
                 )}
