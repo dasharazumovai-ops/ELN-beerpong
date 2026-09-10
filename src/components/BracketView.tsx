@@ -178,7 +178,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
                       const state = game.status === 'active' ? 'active' : game.status === 'finished' ? 'finished' : 'pending';
                       return (
                         <div key={game.id} ref={setRef} className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)}`}>
-                          <div className={`truncate ${game.winner === 'team1' ? 'font-semibold' : ''}`}>{t1.player1} & {t1.player2}</div>
+                          <div className={`truncate ${game.winner === 'team1' ? 'font-semibold' : ''}`}>{t1 ? `${t1.player1} & ${t1.player2}` : 'TBD'}</div>
                           <div className={`truncate ${game.winner === 'team2' ? 'font-semibold' : ''}`}>{t2.player1} & {t2.player2}</div>
                         </div>
                       );
