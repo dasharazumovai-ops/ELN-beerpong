@@ -1,9 +1,8 @@
 import { useState, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useTournament } from './hooks/useTournament';
-import RegistrationPanel from './components/RegistrationPanel';
+import RegistrationSheet from './components/RegistrationSheet';
 import GamesPanel from './components/GamesPanel';
 import BracketView from './components/BracketView';
 import GameStrip from './components/GameStrip';
@@ -202,19 +201,14 @@ export default function App() {
         </div>
       )}
 
-      <Dialog open={showRegistration} onOpenChange={setShowRegistration}>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Team Registration</DialogTitle>
-          </DialogHeader>
-          <RegistrationPanel
-            onAddTeam={addTeam}
-            onCloseRegistration={closeRegistration}
-            registrationClosed={tournament.registrationClosed}
-            teams={tournament.teams}
-          />
-        </DialogContent>
-      </Dialog>
+      <RegistrationSheet
+        open={showRegistration}
+        onOpenChange={setShowRegistration}
+        onAddTeam={addTeam}
+        onCloseRegistration={closeRegistration}
+        registrationClosed={tournament.registrationClosed}
+        teams={tournament.teams}
+      />
     </div>
   );
 }
