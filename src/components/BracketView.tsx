@@ -141,7 +141,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
                 />
               ))}
             </svg>
-            <div className="flex gap-2 relative">
+            <div className="flex gap-10 relative">
               {rounds.map(round => {
                 const roundGames = games.filter(g => g.round === round).sort((a, b) => a.slot - b.slot);
                 return (
