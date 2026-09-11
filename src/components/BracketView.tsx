@@ -18,10 +18,14 @@ interface Connector {
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 1.5;
 
-// Later rounds space their boxes further apart — each round roughly doubles the vertical
-// gap of the one before it (capped so a long bracket doesn't blow out the page).
+// Later rounds space their boxes far enough apart to sit centered between their two feeder
+// games: gap(round) = cardHeight + 2 * gap(round - 1), so it compounds every round instead
+// of just doubling — matching a hand-drawn bracket where round 2 already looks roomy.
+const CARD_HEIGHT_PX = 36;
 function roundGapPx(round: number) {
-  return Math.min(6 * 2 ** (round - 1), 96);
+  let gap = 6;
+  for (let r = 2; r <= round; r++) gap = CARD_HEIGHT_PX + 2 * gap;
+  return gap;
 }
 
 // Card color follows game state: finished = dark grey, bye = light grey (dashed),
