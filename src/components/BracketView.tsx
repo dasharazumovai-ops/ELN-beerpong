@@ -18,6 +18,12 @@ interface Connector {
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 1.5;
 
+// Later rounds space their boxes further apart — each round roughly doubles the vertical
+// gap of the one before it (capped so a long bracket doesn't blow out the page).
+function roundGapPx(round: number) {
+  return Math.min(6 * 2 ** (round - 1), 96);
+}
+
 // Card color follows game state: finished = dark grey, bye = light grey (dashed),
 // active = green, ready to play = blue, waiting for a partner = lightest grey (dashed).
 // No "vs", no table number — this view is for seeing the shape of the tree, not logistics.
@@ -145,10 +151,11 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
               {rounds.map(round => {
                 const roundGames = games.filter(g => g.round === round).sort((a, b) => a.slot - b.slot);
                 return (
-                  <div key={round} className="w-36 shrink-0 space-y-1.5">
-                    <h3 className="text-xs font-bold text-center text-muted-foreground uppercase tracking-wide">
+                  <div key={round} className="w-36 shrink-0">
+                    <h3 className="text-xs font-bold text-center text-muted-foreground uppercase tracking-wide mb-1.5">
                       {round === lastRound && championId ? 'Final' : `R${round}`}
                     </h3>
+                    <div className="flex flex-col" style={{ gap: `${roundGapPx(round)}px` }}>
                     {roundGames.map(game => {
                       const t1 = getTeam(game.team1Id);
                       const t2 = getTeam(game.team2Id);
@@ -183,6 +190,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
                         </div>
                       );
                     })}
+                    </div>
                   </div>
                 );
               })}
