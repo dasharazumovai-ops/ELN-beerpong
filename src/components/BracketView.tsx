@@ -18,17 +18,18 @@ interface Connector {
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 1.5;
 
-// A card in round r+1 sits at the vertical midpoint of the two round-r cards that feed it.
-// Working that out for a uniform card height shows the gap between cards simply doubles
-// every round (BASE_GAP * 2^(round-1)), and each round's first card must start further from
-// the top than the last by half the previous round's gap — otherwise connectors have to
-// zig-zag to reach a misaligned midpoint, which is what made the arrows hard to follow.
+// H = fixed height of a single card, G = the round-1 gap between cards. The gap between
+// cards doubles every round (a card sits between its two feeders, so its column needs twice
+// the breathing room of the round before it). Each round's first card is then nudged down
+// by (R - 1) * (H + G) / 2 so it starts centered against round 1 instead of flush at the top
+// — without that nudge the connectors have to zig-zag to reach a misaligned midpoint.
+const CARD_HEIGHT_PX = 36;
 const BASE_GAP = 6;
 function roundGapPx(round: number) {
   return BASE_GAP * 2 ** (round - 1);
 }
 function roundOffsetPx(round: number) {
-  return (BASE_GAP / 2) * (2 ** (round - 1) - 1);
+  return (round - 1) * (CARD_HEIGHT_PX + BASE_GAP) / 2;
 }
 
 // Card color follows game state: finished = dark grey, bye = light grey (dashed),
