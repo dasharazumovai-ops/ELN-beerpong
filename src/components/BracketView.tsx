@@ -159,7 +159,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
           <p>The bracket fills in as teams register and start playing</p>
         </div>
       ) : (
-        <div ref={scrollRef} className="border rounded overflow-auto" style={{ height: '64vh' }}>
+        <div ref={scrollRef} className="border rounded overflow-x-auto overflow-y-visible" style={{ minHeight: '40vh' }}>
           <div ref={scaledRef} className="p-2 relative" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 'max-content' }}>
             <svg
               className="absolute top-0 left-0 pointer-events-none"
