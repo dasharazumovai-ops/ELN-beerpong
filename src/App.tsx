@@ -115,7 +115,10 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className={`max-w-7xl mx-auto px-4 py-4 ${activeTab === 'main' ? 'pb-28' : ''}`}>
+      <main
+        className={`py-4 ${activeTab === 'main' ? 'pb-28' : ''}`}
+        style={{ paddingLeft: '2.5cm', paddingRight: '2.5cm' }}
+      >
         {activeTab === 'main' && (
           <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-3">
