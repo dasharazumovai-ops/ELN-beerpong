@@ -38,8 +38,8 @@ function cardClasses(state: 'finished' | 'active' | 'pending' | 'waiting' | 'bye
   switch (state) {
     case 'finished': return 'bg-gray-300 border-gray-400';
     case 'bye': return 'bg-gray-200 border-gray-300 border-dashed';
-    case 'active': return 'bg-green-50 border-green-400';
-    case 'pending': return 'bg-blue-50 border-blue-300';
+    case 'active': return 'bg-green-200 border-green-500';
+    case 'pending': return 'bg-blue-200 border-blue-500';
     case 'waiting': return 'bg-gray-50 border-gray-300 border-dashed';
   }
 }
