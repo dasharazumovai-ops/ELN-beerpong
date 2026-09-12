@@ -98,17 +98,45 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
 
   // Trackpad pinch (reported as wheel + ctrlKey) zooms the tree instead of the page.
   // Needs a non-passive native listener since React's onWheel can't preventDefault reliably.
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+
+  // Zoom must stay anchored under the cursor/fingers, not the top-left corner — otherwise
+  // pinching anywhere but the top-left edge drags the view toward that corner instead of
+  // the point you're actually looking at. Record which content point is under the cursor
+  // before the zoom changes, then re-scroll to keep that same point under the cursor after.
+  const pendingAnchorRef = useRef<{ contentX: number; contentY: number; offsetX: number; offsetY: number } | null>(null);
+
   useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const offsetX = e.clientX - rect.left;
+      const offsetY = e.clientY - rect.top;
+      const currentZoom = zoomRef.current;
+      pendingAnchorRef.current = {
+        contentX: (el.scrollLeft + offsetX) / currentZoom,
+        contentY: (el.scrollTop + offsetY) / currentZoom,
+        offsetX,
+        offsetY,
+      };
       setZoom(z => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, +(z - e.deltaY * 0.01).toFixed(2))));
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const anchor = pendingAnchorRef.current;
+    if (!el || !anchor) return;
+    el.scrollLeft = anchor.contentX * zoom - anchor.offsetX;
+    el.scrollTop = anchor.contentY * zoom - anchor.offsetY;
+    pendingAnchorRef.current = null;
+  }, [zoom]);
 
   return (
     <div className="space-y-1.5">
