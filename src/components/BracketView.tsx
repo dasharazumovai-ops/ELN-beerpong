@@ -18,18 +18,18 @@ interface Connector {
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 1.5;
 
-// H = fixed height of a single card, G = the round-1 gap between cards. The gap between
-// cards doubles every round (a card sits between its two feeders, so its column needs twice
-// the breathing room of the round before it). Each round's first card is then nudged down
-// by (R - 1) * (H + G) / 2 so it starts centered against round 1 instead of flush at the top
-// — without that nudge the connectors have to zig-zag to reach a misaligned midpoint.
+// H = fixed height of a single card, G = the round-1 gap between cards. Recursively:
+//   gap(n)    = 2 * gap(n-1) + H       (each round needs 2x its predecessor's room, plus a card)
+//   offset(n) = offset(n-1) + (H + gap(n-1)) / 2   (nudge down to center against round n-1)
+// which closes to the two formulas below — this is what actually centers a card between its
+// two feeders; a merely-doubling gap or a linear offset both leave connectors mis-landing.
 const CARD_HEIGHT_PX = 36;
 const BASE_GAP = 6;
 function roundGapPx(round: number) {
-  return BASE_GAP * 2 ** (round - 1);
+  return (BASE_GAP + CARD_HEIGHT_PX) * 2 ** (round - 1) - CARD_HEIGHT_PX;
 }
 function roundOffsetPx(round: number) {
-  return (round - 1) * (CARD_HEIGHT_PX + BASE_GAP) / 2;
+  return ((CARD_HEIGHT_PX + BASE_GAP) / 2) * (2 ** (round - 1) - 1);
 }
 
 // Card color follows game state: finished = dark grey, bye = light grey (dashed),
