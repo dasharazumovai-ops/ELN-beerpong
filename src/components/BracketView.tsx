@@ -18,14 +18,17 @@ interface Connector {
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 1.5;
 
-// Later rounds space their boxes far enough apart to sit centered between their two feeder
-// games: gap(round) = cardHeight + 2 * gap(round - 1), so it compounds every round instead
-// of just doubling — matching a hand-drawn bracket where round 2 already looks roomy.
-const CARD_HEIGHT_PX = 36;
+// A card in round r+1 sits at the vertical midpoint of the two round-r cards that feed it.
+// Working that out for a uniform card height shows the gap between cards simply doubles
+// every round (BASE_GAP * 2^(round-1)), and each round's first card must start further from
+// the top than the last by half the previous round's gap — otherwise connectors have to
+// zig-zag to reach a misaligned midpoint, which is what made the arrows hard to follow.
+const BASE_GAP = 6;
 function roundGapPx(round: number) {
-  let gap = 6;
-  for (let r = 2; r <= round; r++) gap = CARD_HEIGHT_PX + 2 * gap;
-  return gap;
+  return BASE_GAP * 2 ** (round - 1);
+}
+function roundOffsetPx(round: number) {
+  return (BASE_GAP / 2) * (2 ** (round - 1) - 1);
 }
 
 // Card color follows game state: finished = dark grey, bye = light grey (dashed),
@@ -159,7 +162,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam 
                     <h3 className="text-xs font-bold text-center text-muted-foreground uppercase tracking-wide mb-1.5">
                       {round === lastRound && championId ? 'Final' : `R${round}`}
                     </h3>
-                    <div className="flex flex-col" style={{ gap: `${roundGapPx(round)}px` }}>
+                    <div className="flex flex-col" style={{ gap: `${roundGapPx(round)}px`, marginTop: `${roundOffsetPx(round)}px` }}>
                     {roundGames.map(game => {
                       const t1 = getTeam(game.team1Id);
                       const t2 = getTeam(game.team2Id);
