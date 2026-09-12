@@ -51,7 +51,7 @@ export default function GameStrip({ games, getTeam, onStartGame, onFinishGame }:
                 className={`shrink-0 w-36 rounded-lg border px-2 py-1 ${isActive ? 'border-green-500 border-2 bg-green-50' : 'border-gray-300'}`}
               >
                 <div className="text-[10px] text-muted-foreground flex items-center justify-between">
-                  <span>R{game.round} · T{game.tableNumber}</span>
+                  <span>R{game.round}</span>
                   {isActive && <span className="text-green-700 font-semibold">LIVE</span>}
                 </div>
                 <div className="text-xs font-medium truncate leading-tight">{t1.player1} & {t1.player2}</div>

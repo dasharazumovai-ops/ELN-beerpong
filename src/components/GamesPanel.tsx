@@ -71,7 +71,7 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }
                     <CardTitle className="flex items-center justify-between text-lg">
                       <span className="flex items-center gap-2">
                         <Play className="w-5 h-5 text-green-600" />
-                        Round {game.round} · Table {game.tableNumber}
+                        Round {game.round}
                       </span>
                       <Badge className="bg-green-600 text-white">PLAYING</Badge>
                     </CardTitle>
@@ -118,7 +118,7 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }
                 <Card key={game.id} className="border-gray-300">
                   <CardHeader className="pb-2">
                     <CardTitle className="flex items-center justify-between text-sm">
-                      <span>Round {game.round} · Table {game.tableNumber}</span>
+                      <span>Round {game.round}</span>
                       <Badge variant="outline">Pending</Badge>
                     </CardTitle>
                   </CardHeader>
@@ -165,7 +165,7 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }
                 <Card key={game.id} className="border-red-400 border-2 bg-red-50 opacity-70">
                   <CardHeader className="pb-2">
                     <CardTitle className="flex items-center justify-between text-sm">
-                      <span>Round {game.round} · Table {game.tableNumber}</span>
+                      <span>Round {game.round}</span>
                       <Badge className="bg-red-500 text-white">Finished</Badge>
                     </CardTitle>
                   </CardHeader>
