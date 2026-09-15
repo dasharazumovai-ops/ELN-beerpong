@@ -134,18 +134,27 @@ function revertGame(draft: BracketDraft, gameId: string) {
 
   const nextGame = findNextGame(draft, gameId);
   if (nextGame) {
+    // If the winner had already gone on to finish that next game too, unwind it first. If it's
+    // merely active (started but not finished), pulling a team out of it invalidates it — it
+    // can no longer be in progress, so it drops back to a single-team "waiting" game below.
     if (nextGame.status === 'finished') revertGame(draft, nextGame.id);
     const slotIsTeam1 = nextGame.team1Id === winningTeamId && nextGame.feederGameIds?.[0] === gameId;
-    const otherTeamId = slotIsTeam1 ? nextGame.team2Id : nextGame.team1Id;
-    if (!otherTeamId) {
+    const remainingTeamId = slotIsTeam1 ? nextGame.team2Id : nextGame.team1Id;
+    const remainingFeederId = slotIsTeam1 ? (nextGame.feederGameIds?.[1] ?? null) : (nextGame.feederGameIds?.[0] ?? null);
+    if (!remainingTeamId) {
       // This game only existed to host the winner's arrival — their opponent never showed.
       draft.games = draft.games.filter(g => g.id !== nextGame.id);
     } else {
+      // Whichever team remains always goes back into team1 — arriveAtRound only ever looks
+      // for a waiting game via team2Id === null, so team1 must be the one that's filled.
       draft.games = draft.games.map(g => g.id === nextGame.id ? {
         ...g,
-        team1Id: slotIsTeam1 ? null : g.team1Id,
-        team2Id: slotIsTeam1 ? g.team2Id : null,
-        feederGameIds: slotIsTeam1 ? [null, g.feederGameIds?.[1] ?? null] : [g.feederGameIds?.[0] ?? null, null],
+        team1Id: remainingTeamId,
+        team2Id: null,
+        tableNumber: null,
+        status: 'pending' as const,
+        startedAt: undefined,
+        feederGameIds: [remainingFeederId, null],
       } : g);
     }
   }
