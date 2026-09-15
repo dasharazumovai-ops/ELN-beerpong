@@ -221,12 +221,14 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
       </div>
 
       {rounds.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground border rounded-lg">
-          <p className="text-xl">No games yet</p>
-          <p>The bracket fills in as teams register and start playing</p>
+        <div className="flex items-center justify-center text-center text-muted-foreground border rounded-lg" style={{ minHeight: '120vh' }}>
+          <div>
+            <p className="text-xl">No games yet</p>
+            <p>The bracket fills in as teams register and start playing</p>
+          </div>
         </div>
       ) : (
-        <div ref={scrollRef} className="border rounded" style={{ minHeight: '40vh' }}>
+        <div ref={scrollRef} className="border rounded" style={{ minHeight: '120vh' }}>
           <div style={{ width: naturalSize.width * zoom || undefined, height: naturalSize.height * zoom || undefined, position: 'relative' }}>
           <div ref={scaledRef} className="p-2 relative" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 'max-content', position: 'absolute', top: 0, left: 0 }}>
             <svg
