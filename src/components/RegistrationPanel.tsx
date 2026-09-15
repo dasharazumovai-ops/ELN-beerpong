@@ -27,21 +27,25 @@ const METHOD_BUTTONS: { type: PaymentMethod; label: string; icon: React.ReactNod
   { type: 'cash', label: 'Cash', icon: <Banknote className="w-5 h-5" />, color: 'bg-yellow-500 hover:bg-yellow-600' },
 ];
 
-function ButtonRow<T extends string>({ items, selected, onSelect }: { items: { type: T; label: string; icon: React.ReactNode; color: string }[]; selected: T; onSelect: (type: T) => void }) {
+function ButtonRow<T extends string>({ items, selected, onSelect, disabledTypes }: { items: { type: T; label: string; icon: React.ReactNode; color: string }[]; selected: T; onSelect: (type: T) => void; disabledTypes?: T[] }) {
   return (
     <div className="grid grid-cols-3 gap-3">
-      {items.map((btn) => (
-        <button
-          key={btn.type}
-          onClick={() => onSelect(btn.type)}
-          className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-white font-semibold transition-all ${btn.color} ${
-            selected === btn.type ? 'ring-2 ring-offset-2 ring-black' : 'opacity-70'
-          }`}
-        >
-          {btn.icon}
-          <span className="text-sm">{btn.label}</span>
-        </button>
-      ))}
+      {items.map((btn) => {
+        const isDisabled = disabledTypes?.includes(btn.type) ?? false;
+        return (
+          <button
+            key={btn.type}
+            onClick={() => !isDisabled && onSelect(btn.type)}
+            disabled={isDisabled}
+            className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg text-white font-semibold transition-all ${btn.color} ${
+              isDisabled ? 'opacity-30 cursor-not-allowed grayscale' : selected === btn.type ? 'ring-2 ring-offset-2 ring-black' : 'opacity-70'
+            }`}
+          >
+            {btn.icon}
+            <span className="text-sm">{btn.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -53,18 +57,38 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
   const [method1, setMethod1] = useState<PaymentMethod>('revolut');
   const [entry2, setEntry2] = useState<EntryType>('before9');
   const [method2, setMethod2] = useState<PaymentMethod>('revolut');
-  const [search, setSearch] = useState('');
+  // Whether each name slot was filled by picking a previously-registered participant rather
+  // than typed fresh — a returning player can only re-enter as a "retry", never before9/after9.
+  const [player1Returning, setPlayer1Returning] = useState(false);
+  const [player2Returning, setPlayer2Returning] = useState(false);
+  const [rejoinSearch, setRejoinSearch] = useState('');
 
-  const filteredTeams = teams.filter(team => {
-    const q = search.trim().toLowerCase();
-    return !q || team.player1.toLowerCase().includes(q) || team.player2.toLowerCase().includes(q);
-  });
+  const knownNames = Array.from(new Set(teams.flatMap(t => [t.player1, t.player2]))).sort((a, b) => a.localeCompare(b));
+  const rejoinQuery = rejoinSearch.trim().toLowerCase();
+  const rejoinSuggestions = rejoinQuery
+    ? knownNames.filter(name => name.toLowerCase().includes(rejoinQuery)).slice(0, 8)
+    : [];
+
+  const handlePickReturning = (name: string) => {
+    if (!player1.trim()) {
+      setPlayer1(name);
+      setEntry1('retry');
+      setPlayer1Returning(true);
+    } else if (!player2.trim()) {
+      setPlayer2(name);
+      setEntry2('retry');
+      setPlayer2Returning(true);
+    }
+    setRejoinSearch('');
+  };
 
   const handleAdd = () => {
     if (!player1.trim() || !player2.trim()) return;
     onAddTeam(player1, player2, entry1, method1, entry2, method2);
     setPlayer1('');
     setPlayer2('');
+    setPlayer1Returning(false);
+    setPlayer2Returning(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -79,6 +103,35 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
 
   return (
     <div className="space-y-6">
+      {/* Re-register a returning participant */}
+      {!registrationClosed && (
+        <div className="relative space-y-2">
+          <Label className="text-lg font-semibold flex items-center gap-2">
+            <Search className="w-5 h-5" />
+            Re-register a Returning Player
+          </Label>
+          <Input
+            value={rejoinSearch}
+            onChange={(e) => setRejoinSearch(e.target.value)}
+            placeholder="Start typing a name who already played tonight..."
+            className="text-lg h-12"
+          />
+          {rejoinSuggestions.length > 0 && (
+            <div className="absolute z-10 w-full mt-1 rounded-lg border bg-popover shadow-lg overflow-hidden">
+              {rejoinSuggestions.map(name => (
+                <button
+                  key={name}
+                  onClick={() => handlePickReturning(name)}
+                  className="w-full text-left px-4 py-2 hover:bg-muted transition-colors text-base"
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Add Team Form */}
       {registrationClosed ? (
         <Card className="border-2 border-dashed">
@@ -104,7 +157,7 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
                 <Input
                   id="player1"
                   value={player1}
-                  onChange={(e) => setPlayer1(e.target.value)}
+                  onChange={(e) => { setPlayer1(e.target.value); setPlayer1Returning(false); }}
                   onKeyDown={handleKeyDown}
                   placeholder="Name..."
                   className="text-lg h-12"
@@ -116,7 +169,7 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
                 <Input
                   id="player2"
                   value={player2}
-                  onChange={(e) => setPlayer2(e.target.value)}
+                  onChange={(e) => { setPlayer2(e.target.value); setPlayer2Returning(false); }}
                   onKeyDown={handleKeyDown}
                   placeholder="Name..."
                   className="text-lg h-12"
@@ -128,8 +181,8 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
             <div className="space-y-3">
               <Label className="text-lg font-semibold">Player 1 Payment</Label>
               <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Entry</p>
-                <ButtonRow items={ENTRY_BUTTONS} selected={entry1} onSelect={setEntry1} />
+                <p className="text-sm text-muted-foreground">Entry{player1Returning && ' — returning player, retry only'}</p>
+                <ButtonRow items={ENTRY_BUTTONS} selected={entry1} onSelect={setEntry1} disabledTypes={player1Returning ? ['before9', 'after9'] : undefined} />
               </div>
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Payment Method</p>
@@ -141,8 +194,8 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
             <div className="space-y-3">
               <Label className="text-lg font-semibold">Player 2 Payment</Label>
               <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">Entry</p>
-                <ButtonRow items={ENTRY_BUTTONS} selected={entry2} onSelect={setEntry2} />
+                <p className="text-sm text-muted-foreground">Entry{player2Returning && ' — returning player, retry only'}</p>
+                <ButtonRow items={ENTRY_BUTTONS} selected={entry2} onSelect={setEntry2} disabledTypes={player2Returning ? ['before9', 'after9'] : undefined} />
               </div>
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">Payment Method</p>
@@ -185,15 +238,6 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
               Games are already playable as teams pair up — check the Games tab. Only close registration once you're done taking new teams for the night.
             </p>
           )}
-          <div className="flex items-center gap-2 pt-2">
-            <Search className="w-4 h-4 text-muted-foreground shrink-0" />
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Find a player or team..."
-              className="max-w-xs h-8"
-            />
-          </div>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -209,7 +253,7 @@ export default function RegistrationPanel({ onAddTeam, onCloseRegistration, regi
                 </tr>
               </thead>
               <tbody>
-                {filteredTeams.map((team, idx) => (
+                {teams.map((team, idx) => (
                   <tr key={team.id} className="border-b hover:bg-muted/50">
                     <td className="py-2 px-3">{idx + 1}</td>
                     <td className="py-2 px-3 font-medium">{team.player1}</td>

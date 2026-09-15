@@ -90,6 +90,75 @@ function trySettleRound(draft: BracketDraft, round: number) {
   trySettleRound(draft, round + 1);
 }
 
+function findNextGame(draft: BracketDraft, gameId: string): Game | undefined {
+  return draft.games.find(g => g.feederGameIds?.includes(gameId));
+}
+
+/** Mutates `draft` to finish `gameId` with `winner` — the shared core of finishing a game for
+ * the first time and re-finishing one after `revertGame` has undone it. */
+function finishGameOnDraft(draft: BracketDraft, gameId: string, winner: 'team1' | 'team2') {
+  const game = draft.games.find(g => g.id === gameId);
+  if (!game || game.status === 'finished') return;
+
+  const winningTeamId = winner === 'team1' ? game.team1Id : game.team2Id;
+  const losingTeamId = winner === 'team1' ? game.team2Id : game.team1Id;
+  if (!winningTeamId) return;
+
+  const finishedGame: Game = { ...game, status: 'finished', winner, finishedAt: new Date().toISOString() };
+  draft.games = draft.games.map(g => g.id === gameId ? finishedGame : g);
+  draft.teams = draft.teams.map(t => t.id === losingTeamId ? { ...t, eliminated: true } : t);
+
+  bumpRound(draft, winningTeamId, game.round + 1);
+
+  const stillActive = draft.teams.filter(t => !t.eliminated);
+  const isChampion = draft.registrationClosed && stillActive.length <= 1;
+  if (!isChampion) {
+    arriveAtRound(draft, game.round + 1, winningTeamId, game.id);
+    trySettleRound(draft, game.round + 1);
+  }
+}
+
+/**
+ * Undoes a finished game so its winner can be re-picked: restores the loser, pulls the winner
+ * back out of whatever they went on to play (recursing into that game first if it has also
+ * finished), and drops the game itself back to 'active'. Only unwinds the winner's own forward
+ * path — a bye elsewhere that happened to be triggered by this game closing out its round is
+ * not re-examined, since that's a rare edge case not worth the complexity of a full replay.
+ */
+function revertGame(draft: BracketDraft, gameId: string) {
+  const game = draft.games.find(g => g.id === gameId);
+  if (!game || game.status !== 'finished' || game.isBye || !game.winner) return;
+
+  const winningTeamId = game.winner === 'team1' ? game.team1Id : game.team2Id;
+  const losingTeamId = game.winner === 'team1' ? game.team2Id : game.team1Id;
+
+  const nextGame = findNextGame(draft, gameId);
+  if (nextGame) {
+    if (nextGame.status === 'finished') revertGame(draft, nextGame.id);
+    const slotIsTeam1 = nextGame.team1Id === winningTeamId && nextGame.feederGameIds?.[0] === gameId;
+    const otherTeamId = slotIsTeam1 ? nextGame.team2Id : nextGame.team1Id;
+    if (!otherTeamId) {
+      // This game only existed to host the winner's arrival — their opponent never showed.
+      draft.games = draft.games.filter(g => g.id !== nextGame.id);
+    } else {
+      draft.games = draft.games.map(g => g.id === nextGame.id ? {
+        ...g,
+        team1Id: slotIsTeam1 ? null : g.team1Id,
+        team2Id: slotIsTeam1 ? g.team2Id : null,
+        feederGameIds: slotIsTeam1 ? [null, g.feederGameIds?.[1] ?? null] : [g.feederGameIds?.[0] ?? null, null],
+      } : g);
+    }
+  }
+
+  if (losingTeamId) {
+    draft.teams = draft.teams.map(t => t.id === losingTeamId ? { ...t, eliminated: false } : t);
+  }
+  if (winningTeamId) {
+    bumpRound(draft, winningTeamId, game.round);
+  }
+  draft.games = draft.games.map(g => g.id === gameId ? { ...g, status: 'active' as const, winner: null, finishedAt: undefined } : g);
+}
+
 export function useTournament() {
   const [tournament, setTournament] = useState<Tournament>(loadTournament);
 
@@ -148,27 +217,22 @@ export function useTournament() {
       const game = prev.games.find(g => g.id === gameId);
       if (!game || game.status === 'finished') return prev;
 
-      const winningTeamId = winner === 'team1' ? game.team1Id : game.team2Id;
-      const losingTeamId = winner === 'team1' ? game.team2Id : game.team1Id;
-      if (!winningTeamId) return prev;
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber, registrationClosed: prev.registrationClosed };
+      finishGameOnDraft(draft, gameId, winner);
+      return { ...prev, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
+    });
+  }, []);
 
-      const finishedGame: Game = { ...game, status: 'finished', winner, finishedAt: new Date().toISOString() };
-      const draft: BracketDraft = {
-        games: prev.games.map(g => g.id === gameId ? finishedGame : g),
-        teams: prev.teams.map(t => t.id === losingTeamId ? { ...t, eliminated: true } : t),
-        nextTable: prev.nextTableNumber,
-        registrationClosed: prev.registrationClosed,
-      };
+  /** Re-picks the winner of an already-finished game — unwinds its effects (and anything the
+   * old winner went on to do) and refinishes it with the new winner. */
+  const changeWinner = useCallback((gameId: string, winner: 'team1' | 'team2') => {
+    setTournament(prev => {
+      const game = prev.games.find(g => g.id === gameId);
+      if (!game || game.status !== 'finished' || game.isBye || game.winner === winner) return prev;
 
-      bumpRound(draft, winningTeamId, game.round + 1);
-
-      const stillActive = draft.teams.filter(t => !t.eliminated);
-      const isChampion = draft.registrationClosed && stillActive.length <= 1;
-      if (!isChampion) {
-        arriveAtRound(draft, game.round + 1, winningTeamId, game.id);
-        trySettleRound(draft, game.round + 1);
-      }
-
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber, registrationClosed: prev.registrationClosed };
+      revertGame(draft, gameId);
+      finishGameOnDraft(draft, gameId, winner);
       return { ...prev, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
     });
   }, []);
@@ -240,6 +304,7 @@ export function useTournament() {
     closeRegistration,
     startGame,
     finishGame,
+    changeWinner,
     updateTeam,
     resetTournament,
     exportData,
