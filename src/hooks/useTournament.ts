@@ -278,6 +278,27 @@ export function useTournament() {
     });
   }, []);
 
+  /**
+   * Deletes a not-yet-decided game (waiting, pending, or active) — e.g. a stray duplicate
+   * pairing — and sends whichever earlier match(es) fed into it back to 'active' so they can
+   * be replayed and produce a correct arrival. Reuses revertGame for each feeder, which
+   * already knows how to clean up (and, once every feeder is gone, delete) the game they fed
+   * into as a side effect — refused if the game has no feeder to fall back to (a round-1 entry).
+   */
+  const deleteGame = useCallback((gameId: string) => {
+    setTournament(prev => {
+      const game = prev.games.find(g => g.id === gameId);
+      if (!game || game.status === 'finished' || game.isBye) return prev;
+      const feederIds = (game.feederGameIds ?? []).filter((id): id is string => id !== null);
+      if (feederIds.length === 0) return prev;
+
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber, registrationClosed: prev.registrationClosed };
+      for (const feederId of feederIds) revertGame(draft, feederId);
+      draft.games = draft.games.filter(g => g.id !== gameId);
+      return { ...prev, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
+    });
+  }, []);
+
   const updateTeam = useCallback((teamId: string, updates: Partial<Team>) => {
     setTournament(prev => ({ ...prev, teams: prev.teams.map(t => t.id === teamId ? { ...t, ...updates } : t) }));
   }, []);
@@ -346,6 +367,7 @@ export function useTournament() {
     startGame,
     finishGame,
     changeWinner,
+    deleteGame,
     updateTeam,
     resetTournament,
     exportData,

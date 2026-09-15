@@ -20,6 +20,7 @@ interface BracketViewProps {
   registrationClosed: boolean;
   getTeam: (id: string | null) => Team | null;
   onChangeWinner: (gameId: string, winner: 'team1' | 'team2') => void;
+  onDeleteGame: (gameId: string) => void;
 }
 
 interface Connector {
@@ -57,10 +58,11 @@ function cardClasses(state: 'finished' | 'active' | 'pending' | 'waiting' | 'bye
   }
 }
 
-export default function BracketView({ teams, games, registrationClosed, getTeam, onChangeWinner }: BracketViewProps) {
+export default function BracketView({ teams, games, registrationClosed, getTeam, onChangeWinner, onDeleteGame }: BracketViewProps) {
   const [zoom, setZoom] = useState(0.7);
   const [confirmGameId, setConfirmGameId] = useState<string | null>(null);
   const [repickGameId, setRepickGameId] = useState<string | null>(null);
+  const [deleteGameId, setDeleteGameId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const scaledRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -93,6 +95,28 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
   const handleRepickWinner = (winner: 'team1' | 'team2') => {
     if (repickGameId) onChangeWinner(repickGameId, winner);
     setRepickGameId(null);
+  };
+
+  const deleteTargetGame = deleteGameId ? games.find(g => g.id === deleteGameId) ?? null : null;
+  const deleteFeederGames = deleteTargetGame
+    ? (deleteTargetGame.feederGameIds ?? [])
+        .filter((id): id is string => id !== null)
+        .map(id => games.find(g => g.id === id))
+        .filter((g): g is Game => !!g)
+    : [];
+  const deleteFeederLabel = deleteFeederGames
+    .map(g => {
+      const t1 = getTeam(g.team1Id);
+      const t2 = getTeam(g.team2Id);
+      if (!t2) return t1 ? `${t1.player1} & ${t1.player2}` : null;
+      return `${t1?.player1} & ${t1?.player2} vs ${t2.player1} & ${t2.player2}`;
+    })
+    .filter((label): label is string => !!label)
+    .join(' and ');
+
+  const handleConfirmDelete = () => {
+    if (deleteGameId) onDeleteGame(deleteGameId);
+    setDeleteGameId(null);
   };
 
   useLayoutEffect(() => {
@@ -281,8 +305,15 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                       }
 
                       if (!t2) {
+                        const canDelete = (game.feederGameIds ?? []).some(id => id !== null);
                         return (
-                          <div key={game.id} ref={setRef} className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('waiting')}`}>
+                          <div
+                            key={game.id}
+                            ref={setRef}
+                            onDoubleClick={() => { if (canDelete) setDeleteGameId(game.id); }}
+                            title={canDelete ? 'Double-click to delete this match' : undefined}
+                            className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('waiting')} ${canDelete ? 'cursor-pointer' : ''}`}
+                          >
                             <div className="font-medium truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
                             <div className="text-muted-foreground truncate">waiting for opponent</div>
                           </div>
@@ -291,13 +322,17 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
 
                       const state = game.status === 'active' ? 'active' : game.status === 'finished' ? 'finished' : 'pending';
                       const isFinished = game.status === 'finished';
+                      const canDelete = !isFinished && (game.feederGameIds ?? []).some(id => id !== null);
                       return (
                         <div
                           key={game.id}
                           ref={setRef}
-                          onDoubleClick={() => { if (isFinished) setConfirmGameId(game.id); }}
-                          title={isFinished ? 'Double-click to change the winner' : undefined}
-                          className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)} ${isFinished ? 'cursor-pointer' : ''}`}
+                          onDoubleClick={() => {
+                            if (isFinished) setConfirmGameId(game.id);
+                            else if (canDelete) setDeleteGameId(game.id);
+                          }}
+                          title={isFinished ? 'Double-click to change the winner' : canDelete ? 'Double-click to delete this match' : undefined}
+                          className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)} ${isFinished || canDelete ? 'cursor-pointer' : ''}`}
                         >
                           <div className={`truncate ${game.winner === 'team1' ? 'font-semibold' : ''}`}>{t1 ? `${t1.player1} & ${t1.player2}` : 'TBD'}</div>
                           <div className={`truncate ${game.winner === 'team2' ? 'font-semibold' : ''}`}>{t2.player1} & {t2.player2}</div>
@@ -338,6 +373,24 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
         team2={repickTeam2}
         onSelectWinner={handleRepickWinner}
       />
+
+      <AlertDialog open={deleteGameId !== null} onOpenChange={(open) => { if (!open) setDeleteGameId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this match?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This removes the match and sends {deleteFeederLabel || 'its earlier match'} back to
+              an active game, so you can play {deleteFeederGames.length > 1 ? 'them' : 'it'} again.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>No</AlertDialogCancel>
+            <AlertDialogAction onClick={handleConfirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

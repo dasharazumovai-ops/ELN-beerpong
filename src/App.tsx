@@ -47,6 +47,7 @@ export default function App() {
     startGame,
     finishGame,
     changeWinner,
+    deleteGame,
     resetTournament,
     exportData,
     importData,
@@ -157,6 +158,7 @@ export default function App() {
               registrationClosed={tournament.registrationClosed}
               getTeam={getTeam}
               onChangeWinner={changeWinner}
+              onDeleteGame={deleteGame}
             />
           </div>
         )}
