@@ -19,8 +19,10 @@ interface BracketViewProps {
   games: Game[];
   registrationClosed: boolean;
   getTeam: (id: string | null) => Team | null;
-  onChangeWinner: (gameId: string, winner: 'team1' | 'team2') => void;
-  onDeleteGame: (gameId: string) => void;
+  onChangeWinner?: (gameId: string, winner: 'team1' | 'team2') => void;
+  onDeleteGame?: (gameId: string) => void;
+  /** Spectator mode: no double-click-to-edit, no cursor/tooltip hints that imply it's editable. */
+  readOnly?: boolean;
 }
 
 interface Connector {
@@ -58,7 +60,7 @@ function cardClasses(state: 'finished' | 'active' | 'pending' | 'waiting' | 'bye
   }
 }
 
-export default function BracketView({ teams, games, registrationClosed, getTeam, onChangeWinner, onDeleteGame }: BracketViewProps) {
+export default function BracketView({ teams, games, registrationClosed, getTeam, onChangeWinner, onDeleteGame, readOnly }: BracketViewProps) {
   const [zoom, setZoom] = useState(0.7);
   const [confirmGameId, setConfirmGameId] = useState<string | null>(null);
   const [repickGameId, setRepickGameId] = useState<string | null>(null);
@@ -93,7 +95,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
   };
 
   const handleRepickWinner = (winner: 'team1' | 'team2') => {
-    if (repickGameId) onChangeWinner(repickGameId, winner);
+    if (repickGameId) onChangeWinner?.(repickGameId, winner);
     setRepickGameId(null);
   };
 
@@ -115,7 +117,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
     .join(' and ');
 
   const handleConfirmDelete = () => {
-    if (deleteGameId) onDeleteGame(deleteGameId);
+    if (deleteGameId) onDeleteGame?.(deleteGameId);
     setDeleteGameId(null);
   };
 
@@ -305,7 +307,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                       }
 
                       if (!t2) {
-                        const canDelete = (game.feederGameIds ?? []).some(id => id !== null);
+                        const canDelete = !readOnly && (game.feederGameIds ?? []).some(id => id !== null);
                         return (
                           <div
                             key={game.id}
@@ -322,17 +324,18 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
 
                       const state = game.status === 'active' ? 'active' : game.status === 'finished' ? 'finished' : 'pending';
                       const isFinished = game.status === 'finished';
-                      const canDelete = !isFinished && (game.feederGameIds ?? []).some(id => id !== null);
+                      const canChangeWinner = !readOnly && isFinished;
+                      const canDelete = !readOnly && !isFinished && (game.feederGameIds ?? []).some(id => id !== null);
                       return (
                         <div
                           key={game.id}
                           ref={setRef}
                           onDoubleClick={() => {
-                            if (isFinished) setConfirmGameId(game.id);
+                            if (canChangeWinner) setConfirmGameId(game.id);
                             else if (canDelete) setDeleteGameId(game.id);
                           }}
-                          title={isFinished ? 'Double-click to change the winner' : canDelete ? 'Double-click to delete this match' : undefined}
-                          className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)} ${isFinished || canDelete ? 'cursor-pointer' : ''}`}
+                          title={canChangeWinner ? 'Double-click to change the winner' : canDelete ? 'Double-click to delete this match' : undefined}
+                          className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)} ${canChangeWinner || canDelete ? 'cursor-pointer' : ''}`}
                         >
                           <div className={`truncate ${game.winner === 'team1' ? 'font-semibold' : ''}`}>{t1 ? `${t1.player1} & ${t1.player2}` : 'TBD'}</div>
                           <div className={`truncate ${game.winner === 'team2' ? 'font-semibold' : ''}`}>{t2.player1} & {t2.player2}</div>

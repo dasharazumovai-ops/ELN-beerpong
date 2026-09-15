@@ -15,6 +15,8 @@ import {
   Upload,
   RotateCcw,
   UserPlus,
+  Share2,
+  Check,
 } from 'lucide-react';
 
 type Tab = 'main' | 'payments' | 'games';
@@ -22,6 +24,7 @@ type Tab = 'main' | 'payments' | 'games';
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('main');
   const [showRegistration, setShowRegistration] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const footerRef = useRef<HTMLDivElement>(null);
   // The footer's real height varies with how many games it's showing (it can wrap to more
@@ -55,6 +58,14 @@ export default function App() {
     getTotalRevenue,
   } = useTournament();
 
+  const copyLiveLink = () => {
+    const url = `${window.location.origin}${window.location.pathname}?live=1`;
+    navigator.clipboard.writeText(url).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 2000);
+    });
+  };
+
   const tabs: { id: Tab; label: string; icon: ReactNode }[] = [
     { id: 'main', label: 'Tournament', icon: <Trophy className="w-5 h-5" /> },
     { id: 'payments', label: 'Payments', icon: <Euro className="w-5 h-5" /> },
@@ -74,6 +85,14 @@ export default function App() {
               </span>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={copyLiveLink}
+              >
+                {linkCopied ? <Check className="w-4 h-4 mr-1" /> : <Share2 className="w-4 h-4 mr-1" />}
+                {linkCopied ? 'Copied!' : 'Share Live View'}
+              </Button>
               <Button
                 variant="outline"
                 size="sm"

@@ -1,4 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
+import { doc, setDoc } from 'firebase/firestore';
+import { db, LIVE_TOURNAMENT_DOC } from '../firebase';
 import type { Tournament, Team, Game, EntryType, PaymentMethod } from '../types';
 import { generateId, getPaymentAmount } from '../types';
 
@@ -204,6 +206,18 @@ export function useTournament() {
   const [tournament, setTournament] = useState<Tournament>(loadTournament);
 
   useEffect(() => saveTournament(tournament), [tournament]);
+
+  // Broadcast every change to Firestore for the read-only live view (?live=1) to pick up in
+  // real time. This device stays the source of truth (localStorage above); Firestore is a
+  // one-way outbound mirror, so a flaky connection here can never corrupt or block local use.
+  // JSON round-tripping strips the odd `undefined` field (e.g. a cleared startedAt), which
+  // Firestore's SDK otherwise rejects outright.
+  useEffect(() => {
+    const ref = doc(db, LIVE_TOURNAMENT_DOC.collection, LIVE_TOURNAMENT_DOC.id);
+    setDoc(ref, JSON.parse(JSON.stringify(tournament))).catch(err => {
+      console.warn('Live view sync failed (offline, or Firestore not enabled yet):', err);
+    });
+  }, [tournament]);
 
   const addTeam = useCallback((
     player1: string,

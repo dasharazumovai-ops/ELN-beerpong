@@ -7,11 +7,12 @@ import type { Game, Team } from '../types';
 interface GameStripProps {
   games: Game[];
   getTeam: (id: string | null) => Team | null;
-  onStartGame: (gameId: string) => void;
-  onFinishGame: (gameId: string, winner: 'team1' | 'team2') => void;
+  onStartGame?: (gameId: string) => void;
+  onFinishGame?: (gameId: string, winner: 'team1' | 'team2') => void;
+  readOnly?: boolean;
 }
 
-export default function GameStrip({ games, getTeam, onStartGame, onFinishGame }: GameStripProps) {
+export default function GameStrip({ games, getTeam, onStartGame, onFinishGame, readOnly }: GameStripProps) {
   const [finishingGameId, setFinishingGameId] = useState<string | null>(null);
 
   const active = games.filter(g => g.status === 'active');
@@ -20,7 +21,7 @@ export default function GameStrip({ games, getTeam, onStartGame, onFinishGame }:
 
   const handleWinnerSelect = (winner: 'team1' | 'team2') => {
     if (finishingGameId) {
-      onFinishGame(finishingGameId, winner);
+      onFinishGame?.(finishingGameId, winner);
       setFinishingGameId(null);
     }
   };
@@ -56,17 +57,17 @@ export default function GameStrip({ games, getTeam, onStartGame, onFinishGame }:
                 </div>
                 <div className="text-xs font-medium truncate leading-tight">{t1.player1} & {t1.player2}</div>
                 <div className="text-xs font-medium truncate leading-tight">{t2.player1} & {t2.player2}</div>
-                {isActive ? (
+                {!readOnly && (isActive ? (
                   <Button size="sm" onClick={() => setFinishingGameId(game.id)} className="w-full mt-1 h-6 text-xs bg-red-500 hover:bg-red-600">
                     <Flag className="w-3 h-3 mr-1" />
                     Finish
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={() => onStartGame(game.id)} className="w-full mt-1 h-6 text-xs bg-green-500 hover:bg-green-600">
+                  <Button size="sm" onClick={() => onStartGame?.(game.id)} className="w-full mt-1 h-6 text-xs bg-green-500 hover:bg-green-600">
                     <Play className="w-3 h-3 mr-1" />
                     Start
                   </Button>
-                )}
+                ))}
               </div>
             );
           })}
