@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { useTournament } from './hooks/useTournament';
@@ -23,6 +23,22 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>('main');
   const [showRegistration, setShowRegistration] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
+  // The footer's real height varies with how many games it's showing (it can wrap to more
+  // rows), so a fixed padding-bottom estimate can fall short and let it cover the last row of
+  // the bracket. Measure it and always clear it with room to spare instead of guessing.
+  const [footerClearance, setFooterClearance] = useState(112);
+
+  useEffect(() => {
+    if (activeTab !== 'main') return;
+    const el = footerRef.current;
+    if (!el) return;
+    const update = () => setFooterClearance(el.offsetHeight + 48);
+    update();
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(el);
+    return () => resizeObserver.disconnect();
+  }, [activeTab]);
 
   const {
     tournament,
@@ -117,8 +133,8 @@ export default function App() {
 
       {/* Main Content */}
       <main
-        className={`py-4 ${activeTab === 'main' ? 'pb-28' : ''}`}
-        style={{ paddingLeft: '2.5cm', paddingRight: '2.5cm' }}
+        className="py-4"
+        style={{ paddingLeft: '2.5cm', paddingRight: '2.5cm', paddingBottom: activeTab === 'main' ? footerClearance : undefined }}
       >
         {activeTab === 'main' && (
           <div className="space-y-3">
@@ -163,7 +179,7 @@ export default function App() {
       </main>
 
       {activeTab === 'main' && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-card border-t shadow-[0_-4px_16px_rgba(0,0,0,0.1)]">
+        <div ref={footerRef} className="fixed bottom-0 left-0 right-0 z-30 bg-card border-t shadow-[0_-4px_16px_rgba(0,0,0,0.1)]">
           <div className="py-2" style={{ paddingLeft: '1.5cm', paddingRight: '1.5cm' }}>
             <GameStrip
               games={tournament.games}

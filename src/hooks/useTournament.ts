@@ -16,10 +16,42 @@ function createEmptyTournament(): Tournament {
   };
 }
 
+/**
+ * Heals games saved (before a since-fixed bug) with team1Id null and team2Id filled — an
+ * invalid shape the rest of the app never produces and can't pair a new opponent into. Also
+ * catches an active/finished game left with a missing team, which can only mean it was
+ * interrupted mid-way through a winner change. Runs on every load so old corrupted saves
+ * self-repair without the user having to do anything.
+ */
+function repairGames(games: Game[]): Game[] {
+  return games.map(g => {
+    if (g.isBye) return g;
+    if (!g.team1Id && g.team2Id) {
+      return {
+        ...g,
+        team1Id: g.team2Id,
+        team2Id: null,
+        tableNumber: null,
+        status: 'pending' as const,
+        winner: null,
+        startedAt: undefined,
+        finishedAt: undefined,
+        feederGameIds: [g.feederGameIds?.[1] ?? null, null],
+      };
+    }
+    if (!g.team2Id && g.status !== 'pending') {
+      return { ...g, status: 'pending' as const, winner: null, startedAt: undefined, finishedAt: undefined };
+    }
+    return g;
+  });
+}
+
 function loadTournament(): Tournament {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : createEmptyTournament();
+    if (!saved) return createEmptyTournament();
+    const parsed = JSON.parse(saved) as Tournament;
+    return { ...parsed, games: repairGames(parsed.games) };
   } catch {
     return createEmptyTournament();
   }
@@ -292,8 +324,8 @@ export function useTournament() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string);
-        setTournament(data);
+        const data = JSON.parse(e.target?.result as string) as Tournament;
+        setTournament({ ...data, games: repairGames(data.games) });
       } catch {
         alert('Invalid file format');
       }
