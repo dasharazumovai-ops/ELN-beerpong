@@ -9,12 +9,14 @@ import type { Game, Team } from '../types';
 
 interface GamesPanelProps {
   games: Game[];
-  onStartGame: (gameId: string) => void;
-  onFinishGame: (gameId: string, winner: 'team1' | 'team2') => void;
+  onStartGame?: (gameId: string) => void;
+  onFinishGame?: (gameId: string, winner: 'team1' | 'team2') => void;
   getTeam: (id: string | null) => Team | null;
+  /** Spectator mode (live view): no START/FINISH controls. */
+  readOnly?: boolean;
 }
 
-export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }: GamesPanelProps) {
+export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam, readOnly }: GamesPanelProps) {
   const [finishingGameId, setFinishingGameId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
@@ -32,7 +34,7 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }
 
   const handleWinnerSelect = (winner: 'team1' | 'team2') => {
     if (finishingGameId) {
-      onFinishGame(finishingGameId, winner);
+      onFinishGame?.(finishingGameId, winner);
       setFinishingGameId(null);
     }
   };
@@ -87,13 +89,15 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }
                         <div className="text-2xl font-bold">{t2.player2}</div>
                       </div>
                     </div>
-                    <Button
-                      onClick={() => setFinishingGameId(game.id)}
-                      className="w-full h-14 text-xl font-bold bg-red-500 hover:bg-red-600"
-                    >
-                      <Flag className="w-6 h-6 mr-2" />
-                      FINISH GAME
-                    </Button>
+                    {!readOnly && (
+                      <Button
+                        onClick={() => setFinishingGameId(game.id)}
+                        className="w-full h-14 text-xl font-bold bg-red-500 hover:bg-red-600"
+                      >
+                        <Flag className="w-6 h-6 mr-2" />
+                        FINISH GAME
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               );
@@ -133,13 +137,15 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam }
                         <div className="font-semibold">{t2.player2}</div>
                       </div>
                     </div>
-                    <Button
-                      onClick={() => onStartGame(game.id)}
-                      className="w-full bg-green-500 hover:bg-green-600"
-                    >
-                      <Play className="w-4 h-4 mr-1" />
-                      START
-                    </Button>
+                    {!readOnly && (
+                      <Button
+                        onClick={() => onStartGame?.(game.id)}
+                        className="w-full bg-green-500 hover:bg-green-600"
+                      >
+                        <Play className="w-4 h-4 mr-1" />
+                        START
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               );

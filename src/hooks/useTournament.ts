@@ -212,11 +212,37 @@ export function useTournament() {
   // one-way outbound mirror, so a flaky connection here can never corrupt or block local use.
   // JSON round-tripping strips the odd `undefined` field (e.g. a cleared startedAt), which
   // Firestore's SDK otherwise rejects outright.
+  //
+  // The live view must always reflect this device, so a push is never given up on: failures
+  // retry with backoff, coming back online re-pushes immediately, and a heartbeat re-pushes the
+  // current state every 30s — which both heals the doc if anything else overwrote it and gives
+  // spectators an `updatedAt` proving the organizer is still connected.
   useEffect(() => {
     const ref = doc(db, LIVE_TOURNAMENT_DOC.collection, LIVE_TOURNAMENT_DOC.id);
-    setDoc(ref, JSON.parse(JSON.stringify(tournament))).catch(err => {
-      console.warn('Live view sync failed (offline, or Firestore not enabled yet):', err);
-    });
+    let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+    let failures = 0;
+
+    const push = () => {
+      clearTimeout(retryTimer);
+      setDoc(ref, { ...JSON.parse(JSON.stringify(tournament)), updatedAt: new Date().toISOString() })
+        .then(() => { failures = 0; })
+        .catch(err => {
+          console.warn('Live view sync failed (offline, or Firestore rules/config):', err);
+          if (cancelled) return;
+          retryTimer = setTimeout(push, Math.min(30_000, 2_000 * 2 ** failures++));
+        });
+    };
+
+    push();
+    const heartbeat = setInterval(push, 30_000);
+    window.addEventListener('online', push);
+    return () => {
+      cancelled = true;
+      clearTimeout(retryTimer);
+      clearInterval(heartbeat);
+      window.removeEventListener('online', push);
+    };
   }, [tournament]);
 
   const addTeam = useCallback((
