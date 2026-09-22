@@ -70,3 +70,6 @@ const ENTRY_PRICES: Record<EntryType, number> = { before9: 3, after9: 5, retry: 
 export const getPaymentAmount = (entry: EntryType, method: PaymentMethod): number => method === 'free' ? 0 : ENTRY_PRICES[entry];
 
 export const generateId = (): string => Math.random().toString(36).substring(2, 10) + Date.now().toString(36).substring(2, 6);
+
+/** Case- and spacing-insensitive key for comparing player names ("anna  b" matches "Anna B"). */
+export const nameKey = (name: string): string => name.trim().toLowerCase().replace(/\s+/g, ' ');

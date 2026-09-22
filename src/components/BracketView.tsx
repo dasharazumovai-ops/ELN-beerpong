@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
@@ -13,6 +13,7 @@ import {
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import FinishGameDialog from './FinishGameDialog';
 import type { Game, Team } from '../types';
+import { makePlan } from '../bracketPlan';
 
 interface BracketViewProps {
   teams: Team[];
@@ -33,18 +34,46 @@ interface Connector {
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 1.5;
 
-// H = fixed height of a single card, G = the round-1 gap between cards. Recursively:
-//   gap(n)    = 2 * gap(n-1) + H       (each round needs 2x its predecessor's room, plus a card)
-//   offset(n) = offset(n-1) + (H + gap(n-1)) / 2   (nudge down to center against round n-1)
-// which closes to the two formulas below — this is what actually centers a card between its
-// two feeders; a merely-doubling gap or a linear offset both leave connectors mis-landing.
-const CARD_HEIGHT_PX = 36;
+// Cards are absolutely positioned, each centered between the two games that feed it (the slots
+// the bracket plan sends into it). A game still waiting on one of them sits at that same
+// midpoint, so it doesn't jump when its partner finishes. Games saved
+// before the fixed tree existed can have arbitrary feeders, so those follow their recorded
+// feeders instead. Anything that would overlap the card above it gets pushed down.
+const CARD_HEIGHT_PX = 38;
 const BASE_GAP = 6;
-function roundGapPx(round: number) {
-  return (BASE_GAP + CARD_HEIGHT_PX) * 2 ** (round - 1) - CARD_HEIGHT_PX;
-}
-function roundOffsetPx(round: number) {
-  return ((CARD_HEIGHT_PX + BASE_GAP) / 2) * (2 ** (round - 1) - 1);
+
+function computeLayout(games: Game[], registrationClosed: boolean) {
+  const plan = makePlan(games, registrationClosed);
+  const tops = new Map<string, number>();
+  const heights = new Map<number, number>();
+  const lastRound = games.length ? Math.max(...games.map(g => g.round)) : 0;
+
+  for (let round = 1; round <= lastRound; round++) {
+    const roundGames = games.filter(g => g.round === round).sort((a, b) => a.slot - b.slot);
+    const desired = roundGames.map((game, index) => {
+      const feederTops = (game.feederGameIds ?? [])
+        .map(id => (id ? tops.get(id) : undefined))
+        .filter((t): t is number => t !== undefined);
+      const siblingTops = games
+        .filter(g => g.round === round - 1 && plan.dest(round - 1, g.slot) === game.slot)
+        .map(g => tops.get(g.id))
+        .filter((t): t is number => t !== undefined);
+      const anchors = feederTops.length === 2 ? feederTops : siblingTops.length ? siblingTops : feederTops;
+      const top = anchors.length
+        ? anchors.reduce((sum, t) => sum + t, 0) / anchors.length
+        : index * (CARD_HEIGHT_PX + BASE_GAP);
+      return { game, top, index };
+    }).sort((a, b) => a.top - b.top || a.index - b.index);
+
+    let nextFree = 0;
+    for (const { game, top } of desired) {
+      const placed = Math.max(top, nextFree);
+      tops.set(game.id, placed);
+      nextFree = placed + CARD_HEIGHT_PX + BASE_GAP;
+    }
+    heights.set(round, Math.max(0, nextFree - BASE_GAP));
+  }
+  return { tops, heights };
 }
 
 // Card color follows game state: finished = dark grey, bye = light grey (dashed),
@@ -58,6 +87,21 @@ function cardClasses(state: 'finished' | 'active' | 'pending' | 'waiting' | 'bye
     case 'pending': return 'bg-blue-200 border-blue-500';
     case 'waiting': return 'bg-gray-50 border-gray-300 border-dashed';
   }
+}
+
+/** A match can only be deleted if some earlier real game can be sent back to replay — a bye is
+ * not a game, so follow byes back to the game behind them. */
+function hasReplayableFeeder(game: Game, games: Game[]): boolean {
+  const feeders = (game.feederGameIds ?? []).filter((id): id is string => id !== null);
+  if (feeders.length === 0) return false;
+  return feeders.every(id => {
+    let g = games.find(x => x.id === id);
+    while (g?.isBye) {
+      const upstream: string | null = g.feederGameIds?.[0] ?? null;
+      g = upstream ? games.find(x => x.id === upstream) : undefined;
+    }
+    return !!g;
+  });
 }
 
 export default function BracketView({ teams, games, registrationClosed, getTeam, onChangeWinner, onDeleteGame, readOnly }: BracketViewProps) {
@@ -77,6 +121,9 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
   // growing the page. Sizing an explicit spacer to naturalSize * zoom keeps the DOM footprint
   // matching what's actually drawn, so the page always has room to scroll to it.
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+
+  const layout = useMemo(() => computeLayout(games, registrationClosed), [games, registrationClosed]);
+  const cardStyle = (gameId: string) => ({ top: layout.tops.get(gameId) ?? 0, height: CARD_HEIGHT_PX });
 
   const lastRound = games.length ? Math.max(...games.map(g => g.round)) : 0;
   const rounds = Array.from({ length: lastRound }, (_, i) => i + 1);
@@ -288,7 +335,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                     <h3 className="text-xs font-bold text-center text-muted-foreground uppercase tracking-wide mb-1.5">
                       {round === lastRound && championId ? 'Final' : `R${round}`}
                     </h3>
-                    <div className="flex flex-col" style={{ gap: `${roundGapPx(round)}px`, marginTop: `${roundOffsetPx(round)}px` }}>
+                    <div className="relative" style={{ height: layout.heights.get(round) ?? 0 }}>
                     {roundGames.map(game => {
                       const t1 = getTeam(game.team1Id);
                       const t2 = getTeam(game.team2Id);
@@ -299,7 +346,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
 
                       if (game.isBye) {
                         return (
-                          <div key={game.id} ref={setRef} className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('bye')}`}>
+                          <div key={game.id} ref={setRef} style={cardStyle(game.id)} className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('bye')}`}>
                             <div className="font-semibold truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
                             <div className="text-muted-foreground truncate">Bye</div>
                           </div>
@@ -307,14 +354,15 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                       }
 
                       if (!t2) {
-                        const canDelete = !readOnly && (game.feederGameIds ?? []).some(id => id !== null);
+                        const canDelete = !readOnly && hasReplayableFeeder(game, games);
                         return (
                           <div
                             key={game.id}
                             ref={setRef}
+                            style={cardStyle(game.id)}
                             onDoubleClick={() => { if (canDelete) setDeleteGameId(game.id); }}
                             title={canDelete ? 'Double-click to delete this match' : undefined}
-                            className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('waiting')} ${canDelete ? 'cursor-pointer' : ''}`}
+                            className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('waiting')} ${canDelete ? 'cursor-pointer' : ''}`}
                           >
                             <div className="font-medium truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
                             <div className="text-muted-foreground truncate">waiting for opponent</div>
@@ -325,17 +373,18 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                       const state = game.status === 'active' ? 'active' : game.status === 'finished' ? 'finished' : 'pending';
                       const isFinished = game.status === 'finished';
                       const canChangeWinner = !readOnly && isFinished;
-                      const canDelete = !readOnly && !isFinished && (game.feederGameIds ?? []).some(id => id !== null);
+                      const canDelete = !readOnly && !isFinished && hasReplayableFeeder(game, games);
                       return (
                         <div
                           key={game.id}
                           ref={setRef}
+                          style={cardStyle(game.id)}
                           onDoubleClick={() => {
                             if (canChangeWinner) setConfirmGameId(game.id);
                             else if (canDelete) setDeleteGameId(game.id);
                           }}
                           title={canChangeWinner ? 'Double-click to change the winner' : canDelete ? 'Double-click to delete this match' : undefined}
-                          className={`rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)} ${canChangeWinner || canDelete ? 'cursor-pointer' : ''}`}
+                          className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)} ${canChangeWinner || canDelete ? 'cursor-pointer' : ''}`}
                         >
                           <div className={`truncate ${game.winner === 'team1' ? 'font-semibold' : ''}`}>{t1 ? `${t1.player1} & ${t1.player2}` : 'TBD'}</div>
                           <div className={`truncate ${game.winner === 'team2' ? 'font-semibold' : ''}`}>{t2.player1} & {t2.player2}</div>

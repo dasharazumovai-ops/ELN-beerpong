@@ -1,16 +1,24 @@
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Euro, TrendingUp, Users, CreditCard, Gift, Banknote } from 'lucide-react';
+import { Euro, TrendingUp, Users, CreditCard, Gift, Banknote, Pencil } from 'lucide-react';
+import EditTeamDialog from './EditTeamDialog';
 import type { Team } from '../types';
 import { ENTRY_LABELS, ENTRY_COLORS, METHOD_LABELS, METHOD_COLORS, getPaymentAmount } from '../types';
 
 interface PaymentSummaryProps {
   teams: Team[];
   totalRevenue: number;
+  /** Omit for a read-only view (the live spectator page): no edit buttons are shown. */
+  onUpdateTeam?: (teamId: string, updates: Partial<Team>) => void;
 }
 
-export default function PaymentSummary({ teams, totalRevenue }: PaymentSummaryProps) {
+export default function PaymentSummary({ teams, totalRevenue, onUpdateTeam }: PaymentSummaryProps) {
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const editingTeam = teams.find(t => t.id === editingTeamId) ?? null;
+
   const before9Count = teams.filter(t => t.entry1 === 'before9' || t.entry2 === 'before9').length;
   const after9Count = teams.filter(t => t.entry1 === 'after9' || t.entry2 === 'after9').length;
   const retryCount = teams.filter(t => t.entry1 === 'retry' || t.entry2 === 'retry').length;
@@ -109,6 +117,7 @@ export default function PaymentSummary({ teams, totalRevenue }: PaymentSummaryPr
                 <TableHead>Player 2</TableHead>
                 <TableHead>P2 Payment</TableHead>
                 <TableHead className="text-right">Total</TableHead>
+                {onUpdateTeam && <TableHead className="w-10" />}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -128,6 +137,19 @@ export default function PaymentSummary({ teams, totalRevenue }: PaymentSummaryPr
                       <Badge className={METHOD_COLORS[team.method2]}>{METHOD_LABELS[team.method2]}</Badge>
                     </TableCell>
                     <TableCell className="text-right font-bold">€{total.toFixed(2)}</TableCell>
+                    {onUpdateTeam && (
+                      <TableCell>
+                        <Button
+                          size="icon-sm"
+                          variant="ghost"
+                          onClick={() => setEditingTeamId(team.id)}
+                          aria-label={`Edit ${team.player1} & ${team.player2}`}
+                          title="Edit names or payment"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 );
               })}
@@ -135,6 +157,15 @@ export default function PaymentSummary({ teams, totalRevenue }: PaymentSummaryPr
           </Table>
         </CardContent>
       </Card>
+
+      {onUpdateTeam && (
+        <EditTeamDialog
+          team={editingTeam}
+          otherParticipantNames={teams.filter(t => t.id !== editingTeamId).flatMap(t => [t.player1, t.player2])}
+          onOpenChange={(open) => { if (!open) setEditingTeamId(null); }}
+          onSave={onUpdateTeam}
+        />
+      )}
     </div>
   );
 }

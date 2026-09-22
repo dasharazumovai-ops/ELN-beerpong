@@ -51,6 +51,7 @@ export default function App() {
     finishGame,
     changeWinner,
     deleteGame,
+    updateTeam,
     resetTournament,
     exportData,
     importData,
@@ -186,6 +187,7 @@ export default function App() {
           <PaymentSummary
             teams={tournament.teams}
             totalRevenue={getTotalRevenue()}
+            onUpdateTeam={updateTeam}
           />
         )}
 
