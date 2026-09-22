@@ -179,6 +179,7 @@ export default function App() {
               getTeam={getTeam}
               onChangeWinner={changeWinner}
               onDeleteGame={deleteGame}
+              onUpdateTeam={updateTeam}
             />
           </div>
         )}

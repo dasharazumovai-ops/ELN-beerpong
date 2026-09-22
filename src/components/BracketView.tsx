@@ -10,8 +10,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ZoomIn, ZoomOut, Maximize2, Pencil, Flag, Trash2 } from 'lucide-react';
 import FinishGameDialog from './FinishGameDialog';
+import EditTeamDialog from './EditTeamDialog';
 import type { Game, Team } from '../types';
 import { makePlan } from '../bracketPlan';
 
@@ -22,6 +24,7 @@ interface BracketViewProps {
   getTeam: (id: string | null) => Team | null;
   onChangeWinner?: (gameId: string, winner: 'team1' | 'team2') => void;
   onDeleteGame?: (gameId: string) => void;
+  onUpdateTeam?: (teamId: string, updates: Partial<Team>) => void;
   /** Spectator mode: no double-click-to-edit, no cursor/tooltip hints that imply it's editable. */
   readOnly?: boolean;
 }
@@ -104,11 +107,16 @@ function hasReplayableFeeder(game: Game, games: Game[]): boolean {
   });
 }
 
-export default function BracketView({ teams, games, registrationClosed, getTeam, onChangeWinner, onDeleteGame, readOnly }: BracketViewProps) {
+export default function BracketView({ teams, games, registrationClosed, getTeam, onChangeWinner, onDeleteGame, onUpdateTeam, readOnly }: BracketViewProps) {
   const [zoom, setZoom] = useState(0.7);
   const [confirmGameId, setConfirmGameId] = useState<string | null>(null);
   const [repickGameId, setRepickGameId] = useState<string | null>(null);
   const [deleteGameId, setDeleteGameId] = useState<string | null>(null);
+  // Double-clicking a card opens this chooser first, rather than jumping straight to whichever
+  // single action used to be the only option — a card can have names to fix, a winner to
+  // change and a match to delete all at once, so it asks which one you mean.
+  const [actionsGameId, setActionsGameId] = useState<string | null>(null);
+  const [editTeamId, setEditTeamId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const scaledRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -167,6 +175,19 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
     if (deleteGameId) onDeleteGame?.(deleteGameId);
     setDeleteGameId(null);
   };
+
+  const actionsGame = actionsGameId ? games.find(g => g.id === actionsGameId) ?? null : null;
+  const actionsT1 = actionsGame ? getTeam(actionsGame.team1Id) : null;
+  const actionsT2 = actionsGame ? getTeam(actionsGame.team2Id) : null;
+  const actionsCanChangeWinner = !readOnly && actionsGame?.status === 'finished' && !actionsGame.isBye;
+  const actionsCanDelete = !readOnly && !!actionsGame && !actionsGame.isBye && actionsGame.status !== 'finished'
+    && hasReplayableFeeder(actionsGame, games);
+
+  const editTeam = editTeamId ? teams.find(t => t.id === editTeamId) ?? null : null;
+  // Who a "retry" re-entry can legitimately point back to: everyone registered on any OTHER team.
+  const otherParticipantNames = editTeamId
+    ? teams.filter(t => t.id !== editTeamId).flatMap(t => [t.player1, t.player2])
+    : [];
 
   useLayoutEffect(() => {
     const scaled = scaledRef.current;
@@ -345,8 +366,16 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                       };
 
                       if (game.isBye) {
+                        const canEditBye = !readOnly && !!t1;
                         return (
-                          <div key={game.id} ref={setRef} style={cardStyle(game.id)} className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('bye')}`}>
+                          <div
+                            key={game.id}
+                            ref={setRef}
+                            style={cardStyle(game.id)}
+                            onDoubleClick={() => { if (canEditBye) setActionsGameId(game.id); }}
+                            title={canEditBye ? 'Double-click to edit names' : undefined}
+                            className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('bye')} ${canEditBye ? 'cursor-pointer' : ''}`}
+                          >
                             <div className="font-semibold truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
                             <div className="text-muted-foreground truncate">Bye</div>
                           </div>
@@ -354,15 +383,15 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                       }
 
                       if (!t2) {
-                        const canDelete = !readOnly && hasReplayableFeeder(game, games);
+                        const canAct = !readOnly && !!t1;
                         return (
                           <div
                             key={game.id}
                             ref={setRef}
                             style={cardStyle(game.id)}
-                            onDoubleClick={() => { if (canDelete) setDeleteGameId(game.id); }}
-                            title={canDelete ? 'Double-click to delete this match' : undefined}
-                            className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('waiting')} ${canDelete ? 'cursor-pointer' : ''}`}
+                            onDoubleClick={() => { if (canAct) setActionsGameId(game.id); }}
+                            title={canAct ? 'Double-click for options' : undefined}
+                            className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('waiting')} ${canAct ? 'cursor-pointer' : ''}`}
                           >
                             <div className="font-medium truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
                             <div className="text-muted-foreground truncate">waiting for opponent</div>
@@ -371,20 +400,15 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                       }
 
                       const state = game.status === 'active' ? 'active' : game.status === 'finished' ? 'finished' : 'pending';
-                      const isFinished = game.status === 'finished';
-                      const canChangeWinner = !readOnly && isFinished;
-                      const canDelete = !readOnly && !isFinished && hasReplayableFeeder(game, games);
+                      const canAct = !readOnly;
                       return (
                         <div
                           key={game.id}
                           ref={setRef}
                           style={cardStyle(game.id)}
-                          onDoubleClick={() => {
-                            if (canChangeWinner) setConfirmGameId(game.id);
-                            else if (canDelete) setDeleteGameId(game.id);
-                          }}
-                          title={canChangeWinner ? 'Double-click to change the winner' : canDelete ? 'Double-click to delete this match' : undefined}
-                          className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)} ${canChangeWinner || canDelete ? 'cursor-pointer' : ''}`}
+                          onDoubleClick={() => { if (canAct) setActionsGameId(game.id); }}
+                          title={canAct ? 'Double-click for options' : undefined}
+                          className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)} ${canAct ? 'cursor-pointer' : ''}`}
                         >
                           <div className={`truncate ${game.winner === 'team1' ? 'font-semibold' : ''}`}>{t1 ? `${t1.player1} & ${t1.player2}` : 'TBD'}</div>
                           <div className={`truncate ${game.winner === 'team2' ? 'font-semibold' : ''}`}>{t2.player1} & {t2.player2}</div>
@@ -443,6 +467,68 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={actionsGameId !== null} onOpenChange={(open) => { if (!open) setActionsGameId(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {actionsT1 && actionsT2
+                ? `${actionsT1.player1} & ${actionsT1.player2} vs ${actionsT2.player1} & ${actionsT2.player2}`
+                : actionsT1 ? `${actionsT1.player1} & ${actionsT1.player2}` : 'Match options'}
+            </DialogTitle>
+            <DialogDescription>What do you want to do with this match?</DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            {actionsT1 && (
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => { setEditTeamId(actionsT1.id); setActionsGameId(null); }}
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit {actionsT1.player1} & {actionsT1.player2}
+              </Button>
+            )}
+            {actionsT2 && (
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => { setEditTeamId(actionsT2.id); setActionsGameId(null); }}
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit {actionsT2.player1} & {actionsT2.player2}
+              </Button>
+            )}
+            {actionsCanChangeWinner && (
+              <Button
+                variant="outline"
+                className="justify-start"
+                onClick={() => { setConfirmGameId(actionsGameId); setActionsGameId(null); }}
+              >
+                <Flag className="w-4 h-4 mr-2" />
+                Change the winner
+              </Button>
+            )}
+            {actionsCanDelete && (
+              <Button
+                variant="outline"
+                className="justify-start text-destructive hover:text-destructive"
+                onClick={() => { setDeleteGameId(actionsGameId); setActionsGameId(null); }}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete this match & go back to the previous game
+              </Button>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <EditTeamDialog
+        team={editTeam}
+        otherParticipantNames={otherParticipantNames}
+        onOpenChange={(open) => { if (!open) setEditTeamId(null); }}
+        onSave={(teamId, updates) => onUpdateTeam?.(teamId, updates)}
+      />
     </div>
   );
 }
