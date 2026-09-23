@@ -3,21 +3,25 @@ import { Button } from '@/components/ui/button';
 import { Play, Flag, Swords } from 'lucide-react';
 import FinishGameDialog from './FinishGameDialog';
 import type { Game, Team } from '../types';
+import { firstFreeTable } from '../types';
 
 interface GameStripProps {
   games: Game[];
   getTeam: (id: string | null) => Team | null;
   onStartGame?: (gameId: string) => void;
   onFinishGame?: (gameId: string, winner: 'team1' | 'team2') => void;
+  /** How many physical tables are set up tonight — gates the Start buttons below. Defaults to 5. */
+  tableCount?: number;
   readOnly?: boolean;
 }
 
-export default function GameStrip({ games, getTeam, onStartGame, onFinishGame, readOnly }: GameStripProps) {
+export default function GameStrip({ games, getTeam, onStartGame, onFinishGame, tableCount = 5, readOnly }: GameStripProps) {
   const [finishingGameId, setFinishingGameId] = useState<string | null>(null);
 
   const active = games.filter(g => g.status === 'active');
   const pending = games.filter(g => g.status === 'pending' && g.team2Id !== null);
   const shown = [...active, ...pending];
+  const hasFreeTable = firstFreeTable(games, tableCount) !== null;
 
   const handleWinnerSelect = (winner: 'team1' | 'team2') => {
     if (finishingGameId) {
@@ -52,7 +56,7 @@ export default function GameStrip({ games, getTeam, onStartGame, onFinishGame, r
                 className={`shrink-0 w-36 rounded-lg border px-2 py-1 ${isActive ? 'border-green-500 border-2 bg-green-50' : 'border-gray-300'}`}
               >
                 <div className="text-[10px] text-muted-foreground flex items-center justify-between">
-                  <span>R{game.round}</span>
+                  <span>Game {game.gameNumber}{isActive && game.tableNumber !== null ? ` · Table ${game.tableNumber}` : ''}</span>
                   {isActive && <span className="text-green-700 font-semibold">LIVE</span>}
                 </div>
                 <div className="text-xs font-medium truncate leading-tight">{t1.player1} & {t1.player2}</div>
@@ -63,9 +67,15 @@ export default function GameStrip({ games, getTeam, onStartGame, onFinishGame, r
                     Finish
                   </Button>
                 ) : (
-                  <Button size="sm" onClick={() => onStartGame?.(game.id)} className="w-full mt-1 h-6 text-xs bg-green-500 hover:bg-green-600">
+                  <Button
+                    size="sm"
+                    onClick={() => onStartGame?.(game.id)}
+                    disabled={!hasFreeTable}
+                    title={hasFreeTable ? undefined : 'No free tables right now'}
+                    className="w-full mt-1 h-6 text-xs bg-green-500 hover:bg-green-600"
+                  >
                     <Play className="w-3 h-3 mr-1" />
-                    Start
+                    {hasFreeTable ? 'Start' : 'Full'}
                   </Button>
                 ))}
               </div>

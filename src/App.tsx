@@ -52,6 +52,7 @@ export default function App() {
     changeWinner,
     deleteGame,
     updateTeam,
+    setTableCount,
     resetTournament,
     exportData,
     importData,
@@ -198,6 +199,8 @@ export default function App() {
             onStartGame={startGame}
             onFinishGame={finishGame}
             getTeam={getTeam}
+            tableCount={tournament.tableCount}
+            onSetTableCount={setTableCount}
           />
         )}
       </main>
@@ -210,6 +213,7 @@ export default function App() {
               getTeam={getTeam}
               onStartGame={startGame}
               onFinishGame={finishGame}
+              tableCount={tournament.tableCount}
             />
           </div>
         </div>

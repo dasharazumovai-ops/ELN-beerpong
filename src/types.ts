@@ -20,6 +20,11 @@ export interface Game {
   round: number;
   /** Display order within the round (arrival order) — not a feeder relationship. */
   slot: number;
+  /** Permanent, sequential ID assigned once when the game is first created and never reused or
+   * reassigned — "Game 7" always means the same match, independent of round/slot and of which
+   * table (if any) it's eventually played on. This is what organizers call out ("send Game 7 to
+   * table 2") since round/slot numbering isn't something anyone thinks in during a live event. */
+  gameNumber: number;
   tableNumber: number | null;
   team1Id: string | null;
   team2Id: string | null;
@@ -38,7 +43,11 @@ export interface Tournament {
   teams: Team[];
   games: Game[];
   registrationClosed: boolean;
-  nextTableNumber: number;
+  /** How many physical tables are set up tonight — usually 5, sometimes fewer. Editable per event. */
+  tableCount: number;
+  /** The gameNumber the next newly-created game gets — ever-increasing, never reused, so every
+   * game keeps a stable, permanent number for as long as the tournament exists. */
+  nextGameNumber: number;
 }
 
 export const ENTRY_LABELS: Record<EntryType, string> = {
@@ -73,3 +82,13 @@ export const generateId = (): string => Math.random().toString(36).substring(2, 
 
 /** Case- and spacing-insensitive key for comparing player names ("anna  b" matches "Anna B"). */
 export const nameKey = (name: string): string => name.trim().toLowerCase().replace(/\s+/g, ' ');
+
+/** The lowest-numbered table (1..tableCount) not currently held by an in-progress game, or null
+ * if every table is occupied. A game only holds a table while it's 'active' — pending games
+ * haven't been seated yet, and finished ones have given theirs back — so occupancy is always
+ * read live off the games list rather than tracked as separate state that could drift from it. */
+export const firstFreeTable = (games: Game[], tableCount: number): number | null => {
+  const occupied = new Set(games.filter(g => g.status === 'active' && g.tableNumber !== null).map(g => g.tableNumber));
+  for (let n = 1; n <= tableCount; n++) if (!occupied.has(n)) return n;
+  return null;
+};

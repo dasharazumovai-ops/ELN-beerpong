@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { doc, setDoc } from 'firebase/firestore';
 import { db, LIVE_TOURNAMENT_DOC } from '../firebase';
 import type { Tournament, Team, Game, EntryType, PaymentMethod } from '../types';
-import { generateId, getPaymentAmount } from '../types';
+import { generateId, getPaymentAmount, firstFreeTable } from '../types';
 import { makePlan } from '../bracketPlan';
 
 const STORAGE_KEY = 'eln-beerpong-tournament';
@@ -15,7 +15,8 @@ function createEmptyTournament(): Tournament {
     teams: [],
     games: [],
     registrationClosed: false,
-    nextTableNumber: 1,
+    tableCount: 5,
+    nextGameNumber: 1,
   };
 }
 
@@ -49,12 +50,36 @@ function repairGames(games: Game[]): Game[] {
   });
 }
 
+/**
+ * Saves from before game numbers existed have no `gameNumber` on any game. Assigns 1, 2, 3...
+ * in (round, slot) order — the closest thing to "the order these were actually played" that old
+ * data still records — and reports the next number to hand out from then on. A no-op (returns
+ * the games untouched, with `nextGameNumber` past whatever's already there) once every game
+ * already has one, so this is always safe to run on load.
+ */
+function backfillGameNumbers(games: Game[]): { games: Game[]; nextGameNumber: number } {
+  if (games.every(g => typeof g.gameNumber === 'number')) {
+    return { games, nextGameNumber: Math.max(0, ...games.map(g => g.gameNumber)) + 1 };
+  }
+  const ordered = [...games].sort((a, b) => a.round - b.round || a.slot - b.slot);
+  const numbered = new Map(ordered.map((g, i) => [g.id, i + 1]));
+  return {
+    games: games.map(g => ({ ...g, gameNumber: numbered.get(g.id)! })),
+    nextGameNumber: games.length + 1,
+  };
+}
+
 function loadTournament(): Tournament {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (!saved) return createEmptyTournament();
     const parsed = JSON.parse(saved) as Tournament;
-    return { ...parsed, games: repairGames(parsed.games) };
+    // Saves from before tables were tracked have no tableCount (and any tableNumber on their
+    // games was just an ever-incrementing counter, never a real 1..N table) — treat both as
+    // untouched: default the count and let every game start out with no table assigned.
+    const { games, nextGameNumber } = backfillGameNumbers(repairGames(parsed.games).map(g =>
+      parsed.tableCount === undefined ? { ...g, tableNumber: null } : g));
+    return { ...parsed, tableCount: parsed.tableCount ?? 5, nextGameNumber: parsed.nextGameNumber ?? nextGameNumber, games };
   } catch {
     return createEmptyTournament();
   }
@@ -67,8 +92,8 @@ function saveTournament(t: Tournament) {
 interface BracketDraft {
   games: Game[];
   teams: Team[];
-  nextTable: number;
   registrationClosed: boolean;
+  nextGameNum: number;
 }
 
 function bumpRound(draft: BracketDraft, teamId: string, round: number) {
@@ -95,7 +120,7 @@ function arriveAtRound(draft: BracketDraft, round: number, teamId: string, feede
     const target = draft.games.find(g => g.round === round && g.slot === targetSlot);
     if (!target) {
       draft.games = [...draft.games, {
-        id: generateId(), round, slot: targetSlot, tableNumber: null,
+        id: generateId(), round, slot: targetSlot, gameNumber: draft.nextGameNum++, tableNumber: null,
         team1Id: teamId, team2Id: null, status: 'pending', winner: null, isBye: false,
         feederGameIds: [feederGameId, null],
       }];
@@ -103,7 +128,7 @@ function arriveAtRound(draft: BracketDraft, round: number, teamId: string, feede
     }
     if (!target.isBye && target.status === 'pending' && target.team2Id === null && target.team1Id !== teamId) {
       draft.games = draft.games.map(g => g.id === target.id
-        ? { ...g, team2Id: teamId, tableNumber: draft.nextTable++, feederGameIds: [g.feederGameIds?.[0] ?? null, feederGameId] }
+        ? { ...g, team2Id: teamId, feederGameIds: [g.feederGameIds?.[0] ?? null, feederGameId] }
         : g);
       return;
     }
@@ -117,7 +142,7 @@ function arriveAtRound(draft: BracketDraft, round: number, teamId: string, feede
     const slot = nextFreeSlot(draft, round);
     const byeId = generateId();
     draft.games = [...draft.games, {
-      id: byeId, round, slot, tableNumber: null,
+      id: byeId, round, slot, gameNumber: draft.nextGameNum++, tableNumber: null,
       team1Id: teamId, team2Id: null, status: 'finished', winner: 'team1', isBye: true,
       feederGameIds: [feederGameId, null], finishedAt: new Date().toISOString(),
     }];
@@ -130,12 +155,12 @@ function arriveAtRound(draft: BracketDraft, round: number, teamId: string, feede
   const waiting = draft.games.find(g => g.round === round && g.status === 'pending' && !g.isBye && g.team2Id === null);
   if (waiting) {
     draft.games = draft.games.map(g => g.id === waiting.id
-      ? { ...g, team2Id: teamId, tableNumber: draft.nextTable++, feederGameIds: [g.feederGameIds?.[0] ?? null, feederGameId] }
+      ? { ...g, team2Id: teamId, feederGameIds: [g.feederGameIds?.[0] ?? null, feederGameId] }
       : g);
     return;
   }
   draft.games = [...draft.games, {
-    id: generateId(), round, slot: nextFreeSlot(draft, round), tableNumber: null,
+    id: generateId(), round, slot: nextFreeSlot(draft, round), gameNumber: draft.nextGameNum++, tableNumber: null,
     team1Id: teamId, team2Id: null, status: 'pending', winner: null, isBye: false,
     feederGameIds: [feederGameId, null],
   }];
@@ -408,9 +433,9 @@ export function useTournament() {
       registeredAt: new Date().toISOString(),
     };
     setTournament(prev => {
-      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams, team], nextTable: prev.nextTableNumber, registrationClosed: prev.registrationClosed };
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams, team], registrationClosed: prev.registrationClosed, nextGameNum: prev.nextGameNumber };
       arriveAtRound(draft, 1, team.id, null);
-      return { ...prev, teams: draft.teams, games: draft.games, nextTableNumber: draft.nextTable };
+      return { ...prev, teams: draft.teams, games: draft.games, nextGameNumber: draft.nextGameNum };
     });
     return team.id;
   }, []);
@@ -418,21 +443,36 @@ export function useTournament() {
   const closeRegistration = useCallback(() => {
     setTournament(prev => {
       if (prev.registrationClosed) return prev;
-      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber, registrationClosed: true };
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], registrationClosed: true, nextGameNum: prev.nextGameNumber };
       // Closing registration can leave the last game at any round without a partner ever
       // arriving (e.g. the odd one out in round 1, or a round-2 winner whose partner game
       // doesn't exist), so every round is checked, not just round 1.
       reseatPendingGames(draft);
       settleLoneGames(draft);
-      return { ...prev, registrationClosed: true, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
+      return { ...prev, registrationClosed: true, games: draft.games, teams: draft.teams, nextGameNumber: draft.nextGameNum };
     });
   }, []);
 
+  /** Claims a free table for the game and starts it. Refuses if every table already holds an
+   * active game — the UI is expected to disable Start in that case, but this is the actual
+   * guard against ever double-booking a table (see firstFreeTable in types.ts). */
   const startGame = useCallback((gameId: string) => {
-    setTournament(prev => ({
-      ...prev,
-      games: prev.games.map(g => g.id === gameId ? { ...g, status: 'active' as const, startedAt: new Date().toISOString() } : g),
-    }));
+    setTournament(prev => {
+      const table = firstFreeTable(prev.games, prev.tableCount);
+      if (table === null) return prev;
+      return {
+        ...prev,
+        games: prev.games.map(g => g.id === gameId
+          ? { ...g, status: 'active' as const, startedAt: new Date().toISOString(), tableNumber: table }
+          : g),
+      };
+    });
+  }, []);
+
+  /** How many tables are set up tonight — usually 5, sometimes fewer, and fewer still matter as
+   * the field narrows near the final rounds. Never below 1. */
+  const setTableCount = useCallback((count: number) => {
+    setTournament(prev => ({ ...prev, tableCount: Math.max(1, Math.round(count)) }));
   }, []);
 
   const finishGame = useCallback((gameId: string, winner: 'team1' | 'team2') => {
@@ -440,9 +480,9 @@ export function useTournament() {
       const game = prev.games.find(g => g.id === gameId);
       if (!game || game.status === 'finished') return prev;
 
-      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber, registrationClosed: prev.registrationClosed };
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], registrationClosed: prev.registrationClosed, nextGameNum: prev.nextGameNumber };
       finishGameOnDraft(draft, gameId, winner);
-      return { ...prev, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
+      return { ...prev, games: draft.games, teams: draft.teams, nextGameNumber: draft.nextGameNum };
     });
   }, []);
 
@@ -453,10 +493,10 @@ export function useTournament() {
       const game = prev.games.find(g => g.id === gameId);
       if (!game || game.status !== 'finished' || game.isBye || game.winner === winner) return prev;
 
-      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber, registrationClosed: prev.registrationClosed };
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], registrationClosed: prev.registrationClosed, nextGameNum: prev.nextGameNumber };
       revertGame(draft, gameId);
       finishGameOnDraft(draft, gameId, winner);
-      return { ...prev, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
+      return { ...prev, games: draft.games, teams: draft.teams, nextGameNumber: draft.nextGameNum };
     });
   }, []);
 
@@ -474,13 +514,13 @@ export function useTournament() {
       const feederIds = (game.feederGameIds ?? []).filter((id): id is string => id !== null);
       if (feederIds.length === 0) return prev;
 
-      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], nextTable: prev.nextTableNumber, registrationClosed: prev.registrationClosed };
+      const draft: BracketDraft = { games: [...prev.games], teams: [...prev.teams], registrationClosed: prev.registrationClosed, nextGameNum: prev.nextGameNumber };
       // A feeder can be a bye standing in for a real game further back; that's the one to replay.
       const realFeeders = feederIds.map(id => resolveRealFeeder(draft, id));
       if (realFeeders.some(f => !f)) return prev;
       for (const feeder of realFeeders) revertGame(draft, feeder!.id);
       draft.games = draft.games.filter(g => g.id !== gameId);
-      return { ...prev, games: draft.games, teams: draft.teams, nextTableNumber: draft.nextTable };
+      return { ...prev, games: draft.games, teams: draft.teams, nextGameNumber: draft.nextGameNum };
     });
   }, []);
 
@@ -531,7 +571,9 @@ export function useTournament() {
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target?.result as string) as Tournament;
-        setTournament({ ...data, games: repairGames(data.games) });
+        const { games, nextGameNumber } = backfillGameNumbers(repairGames(data.games).map(g =>
+          data.tableCount === undefined ? { ...g, tableNumber: null } : g));
+        setTournament({ ...data, tableCount: data.tableCount ?? 5, nextGameNumber: data.nextGameNumber ?? nextGameNumber, games });
       } catch {
         alert('Invalid file format');
       }
@@ -554,6 +596,7 @@ export function useTournament() {
     changeWinner,
     deleteGame,
     updateTeam,
+    setTableCount,
     resetTournament,
     exportData,
     importData,

@@ -147,7 +147,7 @@ export default function LiveView() {
       >
         {activeTab === 'payments' && <PaymentSummary teams={tournament.teams} totalRevenue={totalRevenue} />}
 
-        {activeTab === 'games' && <GamesPanel games={tournament.games} getTeam={getTeam} readOnly />}
+        {activeTab === 'games' && <GamesPanel games={tournament.games} getTeam={getTeam} tableCount={tournament.tableCount} readOnly />}
 
         {activeTab === 'main' && <div className="space-y-3">
           <div>
@@ -169,7 +169,7 @@ export default function LiveView() {
 
       <div ref={footerRef} className="fixed bottom-0 left-0 right-0 z-30 bg-card border-t shadow-[0_-4px_16px_rgba(0,0,0,0.1)]">
         <div className="py-2" style={{ paddingLeft: '1.5cm', paddingRight: '1.5cm' }}>
-          <GameStrip games={tournament.games} getTeam={getTeam} readOnly />
+          <GameStrip games={tournament.games} getTeam={getTeam} tableCount={tournament.tableCount} readOnly />
         </div>
       </div>
     </div>

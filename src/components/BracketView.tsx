@@ -79,6 +79,21 @@ function computeLayout(games: Game[], registrationClosed: boolean) {
   return { tops, heights };
 }
 
+// The game's permanent number, tucked inside the card's top-right corner (there's spare room
+// there, and it never sits over the team names on the left). Prominent while the match still
+// matters for finding it in the room; once decided, it fades to a quiet number instead of
+// competing for attention with the (finished/bye) cards, which is most of a big bracket.
+function GameNumberBadge({ n, dim }: { n: number; dim: boolean }) {
+  if (dim) {
+    return <span className="absolute top-0.5 right-1 text-[9px] font-medium text-muted-foreground/60 leading-none">{n}</span>;
+  }
+  return (
+    <span className="absolute top-0.5 right-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-slate-800 text-white text-[9px] font-bold leading-none">
+      {n}
+    </span>
+  );
+}
+
 // Card color follows game state: finished = dark grey, bye = light grey (dashed),
 // active = green, ready to play = blue, waiting for a partner = lightest grey (dashed).
 // No "vs", no table number — this view is for seeing the shape of the tree, not logistics.
@@ -376,8 +391,9 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                             title={canEditBye ? 'Double-click to edit names' : undefined}
                             className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('bye')} ${canEditBye ? 'cursor-pointer' : ''}`}
                           >
-                            <div className="font-semibold truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
-                            <div className="text-muted-foreground truncate">Bye</div>
+                            <GameNumberBadge n={game.gameNumber} dim />
+                            <div className="pr-4 font-semibold truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
+                            <div className="pr-4 text-muted-foreground truncate">Bye</div>
                           </div>
                         );
                       }
@@ -393,8 +409,9 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                             title={canAct ? 'Double-click for options' : undefined}
                             className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses('waiting')} ${canAct ? 'cursor-pointer' : ''}`}
                           >
-                            <div className="font-medium truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
-                            <div className="text-muted-foreground truncate">waiting for opponent</div>
+                            <GameNumberBadge n={game.gameNumber} dim={false} />
+                            <div className="pr-4 font-medium truncate">{t1 ? `${t1.player1} & ${t1.player2}` : 'Unknown'}</div>
+                            <div className="pr-4 text-muted-foreground truncate">waiting for opponent</div>
                           </div>
                         );
                       }
@@ -410,8 +427,9 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                           title={canAct ? 'Double-click for options' : undefined}
                           className={`absolute inset-x-0 flex flex-col justify-center overflow-hidden rounded border px-1.5 py-1 text-[11px] leading-tight ${cardClasses(state)} ${canAct ? 'cursor-pointer' : ''}`}
                         >
-                          <div className={`truncate ${game.winner === 'team1' ? 'font-semibold' : ''}`}>{t1 ? `${t1.player1} & ${t1.player2}` : 'TBD'}</div>
-                          <div className={`truncate ${game.winner === 'team2' ? 'font-semibold' : ''}`}>{t2.player1} & {t2.player2}</div>
+                          <GameNumberBadge n={game.gameNumber} dim={game.status === 'finished'} />
+                          <div className={`pr-4 truncate ${game.winner === 'team1' ? 'font-semibold' : ''}`}>{t1 ? `${t1.player1} & ${t1.player2}` : 'TBD'}</div>
+                          <div className={`pr-4 truncate ${game.winner === 'team2' ? 'font-semibold' : ''}`}>{t2.player1} & {t2.player2}</div>
                         </div>
                       );
                     })}

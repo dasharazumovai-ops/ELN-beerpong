@@ -3,20 +3,24 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Play, Trophy, Flag, Search } from 'lucide-react';
+import { Play, Trophy, Flag, Search, Minus, Plus, LayoutGrid } from 'lucide-react';
 import FinishGameDialog from './FinishGameDialog';
 import type { Game, Team } from '../types';
+import { firstFreeTable } from '../types';
 
 interface GamesPanelProps {
   games: Game[];
   onStartGame?: (gameId: string) => void;
   onFinishGame?: (gameId: string, winner: 'team1' | 'team2') => void;
   getTeam: (id: string | null) => Team | null;
-  /** Spectator mode (live view): no START/FINISH controls. */
+  /** How many physical tables are set up tonight. Defaults to 5 if not given (e.g. very old data). */
+  tableCount?: number;
+  onSetTableCount?: (count: number) => void;
+  /** Spectator mode (live view): no START/FINISH controls, no table-count editing. */
   readOnly?: boolean;
 }
 
-export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam, readOnly }: GamesPanelProps) {
+export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam, tableCount = 5, onSetTableCount, readOnly }: GamesPanelProps) {
   const [finishingGameId, setFinishingGameId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
@@ -31,6 +35,12 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam, 
   const activeGames = games.filter(g => g.status === 'active').filter(matchesSearch);
   const pendingGames = games.filter(g => g.status === 'pending' && g.team2Id !== null).filter(matchesSearch);
   const finishedGames = games.filter(g => g.status === 'finished' && !g.isBye).filter(matchesSearch);
+
+  // Unfiltered by search — the tables overview is about the physical room, not whoever's
+  // currently being searched for.
+  const allActive = games.filter(g => g.status === 'active');
+  const gameAtTable = (n: number) => allActive.find(g => g.tableNumber === n);
+  const hasFreeTable = firstFreeTable(games, tableCount) !== null;
 
   const handleWinnerSelect = (winner: 'team1' | 'team2') => {
     if (finishingGameId) {
@@ -55,6 +65,66 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam, 
         />
       </div>
 
+      {/* Tables overview — the physical room, not the bracket. Table numbers are only ever
+          handed out to a game once it's actually started, so this always matches reality: a
+          free box means that table is genuinely open right now. */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="flex items-center justify-between text-base">
+            <span className="flex items-center gap-2">
+              <LayoutGrid className="w-4 h-4" />
+              Tables
+            </span>
+            {!readOnly && onSetTableCount && (
+              <div className="flex items-center gap-1.5">
+                <Button
+                  size="icon-sm"
+                  variant="outline"
+                  onClick={() => onSetTableCount(tableCount - 1)}
+                  disabled={tableCount <= 1}
+                  aria-label="Fewer tables"
+                >
+                  <Minus className="w-3.5 h-3.5" />
+                </Button>
+                <span className="text-sm font-semibold w-6 text-center tabular-nums">{tableCount}</span>
+                <Button size="icon-sm" variant="outline" onClick={() => onSetTableCount(tableCount + 1)} aria-label="More tables">
+                  <Plus className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+            {Array.from({ length: tableCount }, (_, i) => i + 1).map(n => {
+              const game = gameAtTable(n);
+              const t1 = game ? getTeam(game.team1Id) : null;
+              const t2 = game ? getTeam(game.team2Id) : null;
+              return (
+                <div
+                  key={n}
+                  className={`rounded-lg border px-2 py-1.5 text-xs ${
+                    game ? 'border-green-500 bg-green-50' : 'border-dashed border-gray-300 bg-muted/30'
+                  }`}
+                >
+                  <div className="font-bold">Table {n}</div>
+                  {game ? (
+                    <div className="text-green-700 font-semibold whitespace-nowrap">Game {game.gameNumber}</div>
+                  ) : (
+                    <div className="text-muted-foreground">Free</div>
+                  )}
+                  {t1 && t2 && (
+                    <div className="mt-0.5 text-muted-foreground leading-tight truncate">
+                      {t1.player1} & {t1.player2} vs {t2.player1} & {t2.player2}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Active Games - BIG and GREEN */}
       {activeGames.length > 0 && (
         <div>
@@ -70,12 +140,18 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam, 
               return (
                 <Card key={game.id} className="border-green-500 border-4 bg-green-50 shadow-lg">
                   <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center justify-between text-lg">
-                      <span className="flex items-center gap-2">
-                        <Play className="w-5 h-5 text-green-600" />
-                        Round {game.round}
+                    <CardTitle className="space-y-1">
+                      <span className="flex items-center gap-2 text-xl">
+                        <Play className="w-5 h-5 text-green-600 shrink-0" />
+                        Game {game.gameNumber}
                       </span>
-                      <Badge className="bg-green-600 text-white">PLAYING</Badge>
+                      <div className="flex items-center gap-2 text-sm font-normal">
+                        <span className="text-muted-foreground">R{game.round}</span>
+                        {game.tableNumber !== null && (
+                          <Badge variant="outline" className="border-green-600 text-green-700">Table {game.tableNumber}</Badge>
+                        )}
+                        <Badge className="bg-green-600 text-white">PLAYING</Badge>
+                      </div>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
@@ -121,9 +197,12 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam, 
               return (
                 <Card key={game.id} className="border-gray-300">
                   <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center justify-between text-sm">
-                      <span>Round {game.round}</span>
-                      <Badge variant="outline">Pending</Badge>
+                    <CardTitle className="space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-base font-bold">Game {game.gameNumber}</span>
+                        <Badge variant="outline">Pending</Badge>
+                      </div>
+                      <span className="text-xs font-normal text-muted-foreground">R{game.round}</span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
@@ -140,10 +219,12 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam, 
                     {!readOnly && (
                       <Button
                         onClick={() => onStartGame?.(game.id)}
+                        disabled={!hasFreeTable}
+                        title={hasFreeTable ? undefined : 'No free tables right now — finish one first'}
                         className="w-full bg-green-500 hover:bg-green-600"
                       >
                         <Play className="w-4 h-4 mr-1" />
-                        START
+                        {hasFreeTable ? 'START' : 'NO FREE TABLES'}
                       </Button>
                     )}
                   </CardContent>
@@ -170,9 +251,12 @@ export default function GamesPanel({ games, onStartGame, onFinishGame, getTeam, 
               return (
                 <Card key={game.id} className="border-red-400 border-2 bg-red-50 opacity-70">
                   <CardHeader className="pb-2">
-                    <CardTitle className="flex items-center justify-between text-sm">
-                      <span>Round {game.round}</span>
-                      <Badge className="bg-red-500 text-white">Finished</Badge>
+                    <CardTitle className="space-y-0.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-base font-bold">Game {game.gameNumber}</span>
+                        <Badge className="bg-red-500 text-white">Finished</Badge>
+                      </div>
+                      <span className="text-xs font-normal text-muted-foreground">R{game.round}</span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
