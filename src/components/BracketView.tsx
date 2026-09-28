@@ -36,6 +36,7 @@ interface Connector {
 
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 1.5;
+const clampZoom = (z: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, z));
 
 // Cards are absolutely positioned, each centered between the two games that feed it (the slots
 // the bracket plan sends into it). A game still waiting on one of them sits at that same
@@ -243,8 +244,6 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
     return () => resizeObserver.disconnect();
   }, [games, zoom]);
 
-  // Trackpad pinch (reported as wheel + ctrlKey) zooms the tree instead of the page.
-  // Needs a non-passive native listener since React's onWheel can't preventDefault reliably.
   const zoomRef = useRef(zoom);
   useEffect(() => { zoomRef.current = zoom; }, [zoom]);
 
@@ -259,17 +258,6 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
   // triggers with no coordinate of their own) can anchor to "wherever you're hovering"
   // instead of always the last wheel event.
   const hoverPosRef = useRef<{ offsetX: number; offsetY: number } | null>(null);
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onMouseMove = (e: MouseEvent) => {
-      const rect = el.getBoundingClientRect();
-      hoverPosRef.current = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
-    };
-    el.addEventListener('mousemove', onMouseMove);
-    return () => el.removeEventListener('mousemove', onMouseMove);
-  }, []);
 
   const zoomAnchored = (nextZoom: (z: number) => number, at?: { offsetX: number; offsetY: number }) => {
     const el = scrollRef.current;
@@ -288,20 +276,57 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
     setZoom(nextZoom);
   };
 
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const onWheel = (e: WheelEvent) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-      const rect = el.getBoundingClientRect();
-      zoomAnchored(
-        z => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, +(z - e.deltaY * 0.01).toFixed(2))),
-        { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top },
-      );
+  // Where a pinch lands, in the bracket container's own coordinates. A pinch that happens off
+  // the bracket — over the header, the side margins, the games strip — still zooms the tree,
+  // anchored to the nearest point on it, instead of falling through to zooming the whole page.
+  const anchorFor = (clientX: number, clientY: number) => {
+    const rect = scrollRef.current!.getBoundingClientRect();
+    return {
+      offsetX: Math.min(rect.width, Math.max(0, clientX - rect.left)),
+      offsetY: Math.min(rect.height, Math.max(0, clientY - rect.top)),
     };
-    el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+  };
+
+  // Touchpad pinch must zoom the tree and NEVER the page: browser page zoom scales the fixed
+  // games strip along with everything else and shoves it off the bottom of the screen. So these
+  // listen on the window (not the bracket box) and look the box up when the pinch happens —
+  // the box doesn't exist until there's a game, and a listener attached at mount time would
+  // silently never be attached for a tournament that starts empty. Chrome, Edge and Firefox
+  // report a pinch as a wheel event with ctrlKey set; Safari reports it as gesture events
+  // carrying a running scale. Both need non-passive listeners so preventDefault can stop the
+  // browser's own zoom.
+  useEffect(() => {
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey || !scrollRef.current) return;
+      e.preventDefault();
+      zoomAnchored(z => clampZoom(+(z - e.deltaY * 0.01).toFixed(2)), anchorFor(e.clientX, e.clientY));
+    };
+
+    let zoomAtGestureStart = 1;
+    const onGestureStart = (e: Event) => {
+      if (!scrollRef.current) return;
+      e.preventDefault();
+      zoomAtGestureStart = zoomRef.current;
+    };
+    const onGestureChange = (e: Event) => {
+      if (!scrollRef.current) return;
+      e.preventDefault();
+      const { scale, clientX, clientY } = e as Event & { scale: number; clientX: number; clientY: number };
+      const target = clampZoom(+(zoomAtGestureStart * scale).toFixed(2));
+      zoomAnchored(() => target, Number.isFinite(clientX) ? anchorFor(clientX, clientY) : undefined);
+    };
+    const onGestureEnd = (e: Event) => { if (scrollRef.current) e.preventDefault(); };
+
+    window.addEventListener('wheel', onWheel, { passive: false });
+    window.addEventListener('gesturestart', onGestureStart, { passive: false });
+    window.addEventListener('gesturechange', onGestureChange, { passive: false });
+    window.addEventListener('gestureend', onGestureEnd, { passive: false });
+    return () => {
+      window.removeEventListener('wheel', onWheel);
+      window.removeEventListener('gesturestart', onGestureStart);
+      window.removeEventListener('gesturechange', onGestureChange);
+      window.removeEventListener('gestureend', onGestureEnd);
+    };
   }, []);
 
   useLayoutEffect(() => {
@@ -337,7 +362,15 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
           </div>
         </div>
       ) : (
-        <div ref={scrollRef} className="border rounded" style={{ minHeight: '120vh' }}>
+        <div
+          ref={scrollRef}
+          className="border rounded"
+          style={{ minHeight: '120vh' }}
+          onMouseMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            hoverPosRef.current = { offsetX: e.clientX - rect.left, offsetY: e.clientY - rect.top };
+          }}
+        >
           <div style={{ width: naturalSize.width * zoom || undefined, height: naturalSize.height * zoom || undefined, position: 'relative' }}>
           <div ref={scaledRef} className="p-2 relative" style={{ transform: `scale(${zoom})`, transformOrigin: 'top left', width: 'max-content', position: 'absolute', top: 0, left: 0 }}>
             <svg
