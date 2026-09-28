@@ -396,7 +396,7 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                 />
               ))}
             </svg>
-            <div className="flex gap-10 relative pl-8">
+            <div className="flex gap-10 relative">
               {rounds.map(round => {
                 const roundGames = games.filter(g => g.round === round).sort((a, b) => a.slot - b.slot);
                 return (
@@ -465,17 +465,6 @@ export default function BracketView({ teams, games, registrationClosed, getTeam,
                         </div>
                       );
                     })}
-                    {/* Round 1 only: the game number, written beside the card in the left gutter
-                        rather than inside it. Byes are never played, so they get none. */}
-                    {round === 1 && roundGames.filter(g => !g.isBye).map(g => (
-                      <span
-                        key={`number-${g.id}`}
-                        className={`absolute right-full mr-1.5 flex items-center text-[11px] font-bold tabular-nums ${g.status === 'finished' ? 'text-muted-foreground/40' : 'text-foreground/70'}`}
-                        style={{ top: layout.tops.get(g.id) ?? 0, height: CARD_HEIGHT_PX }}
-                      >
-                        {g.gameNumber}
-                      </span>
-                    ))}
                     </div>
                   </div>
                 );
